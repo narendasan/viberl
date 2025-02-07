@@ -1,0 +1,14 @@
+[project]
+name = "rl-sandbox"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [{ name = "Naren Dasan", email = "naren@narendasan.com" }]
+requires-python = ">=3.11"
+dependencies = [
+    "evosax>=0.1.6",
+    "jax[cuda12]>=0.5.0",
+    "jumanji>=1.1.0",
+    "rejax>=0.1.1",
+    "wandb>=0.19.6",
+]
