@@ -1,3 +1,5 @@
 wandb/
 *.pyc
 .venv
+ckpts/
+.ruff_cache

@@ -12,3 +12,9 @@ dependencies = [
     "rejax>=0.1.1",
     "wandb>=0.19.6",
 ]
+
+[dependency-groups]
+dev = [
+    "isort>=6.0.0",
+    "ruff>=0.9.5",
+]

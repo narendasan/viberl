@@ -1,0 +1,5 @@
+PolicyEvalResult(lengths=Traced<ShapedArray(int32[128], weak_type=True)>with<BatchTrace> with
+  val = Traced<ShapedArray(int32[128,128], weak_type=True)>with<DynamicJaxprTrace>
+  batch_dim = 0, returns=Traced<ShapedArray(float32[128])>with<BatchTrace> with
+  val = Traced<ShapedArray(float32[128,128])>with<DynamicJaxprTrace>
+  batch_dim = 0)
