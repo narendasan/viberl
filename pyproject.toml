@@ -9,6 +9,7 @@ dependencies = [
     "evosax>=0.1.6",
     "jax[cuda12]>=0.5.0",
     "jumanji>=1.1.0",
+    "orbax>=0.1.9",
     "rejax>=0.1.1",
     "wandb>=0.19.6",
 ]

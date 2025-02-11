@@ -1,0 +1,29 @@
+[experiment]
+name = "test_exp"
+root_seed = 42
+num_agent_seeds = 16
+ckpt_dir = "ckpts"
+tags = ["test"]
+algorithm = "ppo"
+
+[algorithm]
+env = "brax/ant"
+total_timesteps = 10_000_000
+eval_freq = 100_00
+num_envs = 2000
+num_steps = 5
+num_epochs = 4
+num_minibatches = 4
+learning_rate = 0.0003
+max_grad_norm = 10
+gamma = 0.99
+gae_lambda = 0.95
+clip_eps = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+
+[algorithm.env_params]
+backend = "positional"
+
+[algorithm.agent_kwargs]
+activation = "relu"

@@ -3,3 +3,5 @@ wandb/
 .venv
 ckpts/
 .ruff_cache
+__pycache__
+*.pyc

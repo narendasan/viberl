@@ -1263,6 +1263,15 @@ wheels = [
 ]
 
 [[package]]
+name = "orbax"
+version = "0.1.9"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "orbax-checkpoint" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/78/0e144f12703c95d4495e9abc390c2f548ee9f24d2e487137108a921b1d81/orbax-0.1.9.tar.gz", hash = "sha256:42dd487ceef9fbf027f4720f3d041686af75120466a528a8a8141226bc197218", size = 1649 }
+
+[[package]]
 name = "orbax-checkpoint"
 version = "0.11.3"
 source = { registry = "https://pypi.org/simple" }
@@ -1636,6 +1645,7 @@ dependencies = [
     { name = "evosax" },
     { name = "jax", extra = ["cuda12"] },
     { name = "jumanji" },
+    { name = "orbax" },
     { name = "rejax" },
     { name = "wandb" },
 ]
@@ -1651,6 +1661,7 @@ requires-dist = [
     { name = "evosax", specifier = ">=0.1.6" },
     { name = "jax", extras = ["cuda12"], specifier = ">=0.5.0" },
     { name = "jumanji", specifier = ">=1.1.0" },
+    { name = "orbax", specifier = ">=0.1.9" },
     { name = "rejax", specifier = ">=0.1.1" },
     { name = "wandb", specifier = ">=0.19.6" },
 ]
