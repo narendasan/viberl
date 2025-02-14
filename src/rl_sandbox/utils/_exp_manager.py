@@ -1,8 +1,9 @@
 import argparse
+import datetime
 import tomllib
 from pathlib import Path
 from typing import Any, Dict
-import datetime
+
 
 def _generate_experiment_name(config: Dict[str, Any]) -> str:
     prefix = config["experiment"]["name"]

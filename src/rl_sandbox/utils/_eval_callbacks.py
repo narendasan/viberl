@@ -1,13 +1,17 @@
+import json
+import os
 import pickle as pkl
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
 import jax
+import numpy as np
+from flax import struct
 from flax.serialization import to_state_dict
-from jax.tree_util import PyTreeDef
 from rejax.algos import Algorithm
 
 import wandb
+from rl_sandbox.utils._readable_hash import generate_phrase_hash
 from rl_sandbox.utils.types import EvalCallback, PolicyEvalResult
 
 """
@@ -39,9 +43,9 @@ To create your own callback:
 The callback will be called during training to evaluate policy performance.
 """
 
-def build_eval_callback(algo_instance: Algorithm, fs: List[EvalCallback]) -> Callable[[Algorithm, PyTreeDef, jax.Array], Tuple]:
+def build_eval_callback(algo_instance: Algorithm, fs: List[EvalCallback]) -> Callable[[Algorithm, struct.PyTreeNode, jax.Array], Tuple]:
     policy_eval_callback = algo_instance.eval_callback
-    def eval_callback(algo: Algorithm, train_state: PyTreeDef, key: jax.Array) -> Tuple[Tuple[Any, ...]]:
+    def eval_callback(algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array) -> Tuple[Tuple[Any, ...]]:
         policy_result = PolicyEvalResult(*policy_eval_callback(algo, train_state, key))
         results = []
         for f in fs:
@@ -51,10 +55,10 @@ def build_eval_callback(algo_instance: Algorithm, fs: List[EvalCallback]) -> Cal
     return eval_callback
 
 def create_eval_logger() -> EvalCallback:
-    def eval_logger(a: Algorithm, train_state: PyTreeDef, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
+    def eval_logger(a: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
 
-        def log(current_step: int, total_steps: int, mean_return: float, mean_length: float, id: int) -> None:
-            print(f"[{current_step.item()}/{total_steps}](id: {id}): mean return: {mean_return} mean length: {mean_length}")
+        def log(current_step: jax.Array, total_steps: int, mean_return: float, mean_length: float, id: jax.Array) -> None:
+            print(f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}")
 
         jax.experimental.io_callback(
             log,
@@ -63,14 +67,14 @@ def create_eval_logger() -> EvalCallback:
             a.total_timesteps,
             eval_results.returns.mean(),
             eval_results.lengths.mean(),
-            key[0]
+            train_state.seed
         )
         return ()
     return eval_logger
 
 
 def create_wandb_logger() -> EvalCallback:
-    def wandb_logger(a: Algorithm, train_state: PyTreeDef, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
+    def wandb_logger(a: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
         def log(step: int, data: Dict[str, float]) -> None:
             # io_callback returns np.array, which wandb does not like.
             # In jax 0.4.27, this becomes a jax array, should check when upgrading...
@@ -94,16 +98,41 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path) -> EvalCallb
     ckpt_dir_prefix = Path(ckpt_dir)
     exp_path = ckpt_dir_prefix / exp_prefix
     exp_path.mkdir(parents=True, exist_ok=True)
+    def checkpointer(algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
+        def create_checkpoint(t: struct.PyTreeNode, e: PolicyEvalResult, id: jax.Array, total_timesteps: int, mean_returns: float) -> None:
+            gs = str(t.global_step)
+            ts = str(total_timesteps)
+            zs = len(ts) - len(gs)
+            gs = "0"*zs + gs
+            mean_returns = e.returns.mean()
+            mean_lengths = e.lengths.mean()
 
-    def checkpointer(algo: Algorithm, train_state: PyTreeDef, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
-        def create_checkpoint(t: PyTreeDef, e: PolicyEvalResult, id: int) -> None:
-            with open(exp_path / f"{t.global_step}_id{id}_ckpt.pkl", "wb") as f:
-                train_state_dict = to_state_dict(t)
-                pkl.dump(train_state_dict, f)
+            def write_checkpoint(id: jax.Array, t: struct.PyTreeNode, mean_returns: float, mean_lengths: float, tag: str):
+                (exp_path / f"{generate_phrase_hash(id[1])}").mkdir(parents=True, exist_ok=True)
+                with open(exp_path / f"{generate_phrase_hash(id[1])}" / f"{tag}_ckpt.pkl", "wb") as f:
+                    train_state_dict = to_state_dict(t)
+                    pkl.dump(train_state_dict, f)
 
-            with open(exp_path / f"{t.global_step}_id{id}_results.txt", "w") as f:
-                f.write(f"mean returns: {e.returns.mean()}\n")
-                f.write(f"mean length: {e.lengths.mean()}\n")
+                with open(exp_path / f"{generate_phrase_hash(id[1])}"/ f"{tag}_results.json", "w") as f:
+                    json.dump({
+                        "mean_returns": mean_returns.item(),
+                        "mean length": mean_lengths.item(),
+                        "timestep": int(t.global_step.item()),
+                        "seed": np.asarray(id).tolist(),
+                    }, f)
+
+            write_checkpoint(id, t, mean_returns, mean_lengths, gs)
+
+            if not os.path.isfile(exp_path / f"{generate_phrase_hash(id[1])}" / "best_results.json"):
+                write_checkpoint(id, t, mean_returns, mean_lengths, "best")
+
+            else:
+                with open(exp_path / f"{generate_phrase_hash(id[1])}" / "best_results.json", "r") as f:
+                    best = json.load(f)
+
+                if best["mean_returns"] < mean_returns:
+                    write_checkpoint(id, t, mean_returns, mean_lengths, "best")
+
             return
 
         jax.experimental.io_callback(
@@ -111,7 +140,9 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path) -> EvalCallb
             (),
             train_state,
             eval_results,
-            key[0]
+            train_state.seed,
+            algo.total_timesteps,
+            eval_results.returns.mean(),
         )
 
         return ()
