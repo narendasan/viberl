@@ -145,7 +145,7 @@ def create_wandb_logger() -> EvalCallback:
         return ()
     return wandb_logger
 
-def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path) -> EvalCallback:
+def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep: int=50) -> EvalCallback:
     """Create a callback for saving model checkpoints.
 
     This function creates a checkpointer callback that saves model checkpoints and evaluation
@@ -173,7 +173,11 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path) -> EvalCallb
     def checkpointer(algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
         def create_checkpoint(current_step: int, t: struct.PyTreeNode, e: PolicyEvalResult, id: jax.Array, total_timesteps: int) -> None:
             # TODO: Move this into rejax
-            options = ocp.checkpoint_manager.CheckpointManagerOptions()
+            options = ocp.checkpoint_manager.CheckpointManagerOptions(
+                best_fn = lambda x: x["mean_returns"],
+                best_mode="max",
+                max_to_keep=max_to_keep,
+            )
             with ocp.CheckpointManager(
                 exp_path / generate_phrase_hash(id[1]),
                 options=options,
@@ -186,7 +190,6 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path) -> EvalCallb
                         "mean_lengths": e.lengths.mean().item()
                     }
                 )
-
             return
 
         jax.experimental.io_callback(
@@ -216,7 +219,7 @@ def create_checkpointer_from_config(config: Dict[str, Any]) -> EvalCallback:
     Returns:
         EvalCallback: Callback function for saving checkpoints during evaluation
     """
-    callback = create_checkpointer(ckpt_dir=config["experiment"]["ckpt_dir"], exp_name=config["experiment"]["experiment_name"])
+    callback = create_checkpointer(ckpt_dir=config["experiment"]["ckpt_dir"], exp_name=config["experiment"]["experiment_name"], max_to_keep=config["experiment"]["max_ckpt_to_keep"])
 
     ckpt_dir_prefix = Path(config["experiment"]["ckpt_dir"])
     exp_prefix = Path(config["experiment"]["experiment_name"])

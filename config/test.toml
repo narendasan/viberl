@@ -5,6 +5,7 @@ num_agent_seeds = 2
 ckpt_dir = "ckpts"
 tags = ["test"]
 algorithm = "ppo"
+max_ckpt_to_keep = 2
 
 [algorithm]
 env = "brax/ant"
