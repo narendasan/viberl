@@ -1,3 +1,4 @@
+import os
 import logging
 from functools import partial
 
@@ -5,12 +6,15 @@ import jax
 import jax.numpy as jnp
 from rejax import PPO
 
+from brax import envs
+from brax.io import html
+
 import wandb
 from rl_sandbox.env._trajectories import collect_trajectories
 from rl_sandbox.env._visualize import collect_rollouts
 from rl_sandbox.utils import (argparser, build_eval_callback,
                               create_checkpointer_from_config, create_eval_logger,
-                              create_wandb_logger, generate_experiment_config)
+                              create_wandb_logger, generate_experiment_config, load_ckpt)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -46,19 +50,28 @@ print("Training...")
 vmap_train = jax.jit(jax.vmap(algo.train))
 train_states, results = vmap_train(agent_keys)
 print(results)
-#policies = jax.vmap(lambda a, ts: PPO.make_act(a, ts))(agents, train_states)
 
-vmap_collect_trajectories = partial(collect_trajectories,
-    algo=algo,
-    env_name=config["algorithm"]["env"],
-    env_config=config["algorithm"]["env_params"],
-    num_envs=config["algorithm"]["num_envs"],
-    max_steps_in_episode=1000
-)
+env = envs.create(env_name="ant", backend="positional")
 
-t_results, trajectories = jax.vmap(vmap_collect_trajectories)(train_states, agent_keys)
-print(t_results)
-#vis = Visualizer(env, env_params, state_seq, cum_rewards)
-#is.animate("anim.gif")
-print(trajectories)
-breakpoint()
+jit_env_reset = jax.jit(env.reset)
+jit_env_step = jax.jit(env.step)
+
+algo0 = PPO.create(**config["algorithm"])
+train_state = load_ckpt(algo0, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[0], tag="best")
+inference_fn = algo0.make_act(train_state)
+jit_inference_fn = jax.jit(inference_fn)
+
+rollout = []
+rng = jax.random.PRNGKey(seed=1)
+state = jit_env_reset(rng=rng)
+reward = 0
+for _ in range(10000):
+    reward += state.reward
+    rollout.append(state.pipeline_state)
+    act_rng, rng = jax.random.split(rng)
+    act = jit_inference_fn(state.obs, act_rng)
+    state = jit_env_step(state, act)
+
+os.makedirs(f"{os.getcwd()}/results", exist_ok=True)
+html.save(f"{os.getcwd()}/results/{config['experiment']['experiment_name']}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
+print(f"Saved: {reward}")

@@ -21,10 +21,10 @@ class EnvState:
 
 def rollout_single_env(
     act: PolicyFn,  # act(obs, rng) -> action
-    env,
-    env_params,
-    rng,
-    max_steps_in_episode,
+    env: Any,
+    env_params: Dict[str, Any],
+    rng: jax.random.PRNGKey,
+    max_steps_in_episode: int,
 ) -> Tuple[PolicyEvalResult, List[EnvState]]:
 
     rng_reset, rng_eval = jax.random.split(rng)
@@ -34,13 +34,14 @@ def rollout_single_env(
     while state.length < max_steps_in_episode and not state.done:
         rng, rng_act, rng_step = jax.random.split(state.rng, 3)
         action = act(state.last_obs, rng_act)
-        trajectory.append(Transition(state.last_obs, action))
+        trajectory.append(Transition(state.env_state, action, state.reward, state.done))
         obs, env_state, reward, done, info = env.step(
             rng_step, state.env_state, action, env_params
         )
-        jax.debug.callback(lambda s, a ,r ,d: print(f"Transition: state: {s} action: {a}, reward: {r}, done: {d}"), env_state, action, reward, done)
+        #jax.debug.callback(lambda s, a ,r ,d: print(f"Transition: state: {s} action: {a}, reward: {r}, done: {d}"), env_state, action, reward, done)
         state = EnvState(rng=rng, env_state=env_state, last_obs=obs, reward=reward, done=done)
 
+    print(f"Rollout reward: {state.reward}")
     return (PolicyEvalResult(state.length, state.cum_returns), trajectory)
 
 def collect_rollouts(

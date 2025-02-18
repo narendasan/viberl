@@ -7,7 +7,7 @@ from rl_sandbox.utils._eval_callbacks import (
     create_wandb_logger,
 )
 from rl_sandbox.utils._exp_manager import argparser, generate_experiment_config
-from rl_sandbox.utils._load_ckpt import load_ckpt
+from rl_sandbox.utils._checkpoints import load_ckpt
 
 __all__ = [
     "build_eval_callback",

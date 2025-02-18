@@ -46,8 +46,15 @@ def _():
 
 
 @app.cell
+def _(jax):
+    print(jax.default_backend())
+    print(jax.local_devices())
+    return
+
+
+@app.cell
 def _(generate_experiment_config, logging, wandb):
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     config = generate_experiment_config("config/test.toml")
 
     wandb.init(
@@ -84,7 +91,7 @@ def _(PPO, config):
     return (algo,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     mo.md(
         """
@@ -114,7 +121,7 @@ def _(
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md("""We then can vectorize across $N\timesM$ instances of agents and envs and train these in parallel""")
+    mo.md("""We then can vectorize across $N \times M$ instances of agents and envs and train these in parallel""")
     return
 
 
@@ -146,47 +153,87 @@ def _(a, jax, train_states):
 
 
 @app.cell
-def _(
-    PPO,
-    algo,
-    collect_rollouts,
-    config,
-    jax,
-    load_ckpt,
-    root_key,
-    train_states,
-):
-    root_key_, rollout_key = jax.random.split(root_key)
-    for a in range(config["experiment"]["num_agent_seeds"]):
-        train_state = load_ckpt(config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[a], tag="best")
-        algo_ = PPO.create(**config["algorithm"])
-        rollout_key, env_key = jax.random.split(rollout_key)
-        rollout = collect_rollouts(algo, train_state, env_key, env_name=config["algorithm"]["env"], env_config=config["algorithm"]["env_params"], num_envs=config["algorithm"]["num_envs"], max_steps_in_episode=1000)
-    return a, algo_, env_key, rollout, rollout_key, root_key_, train_state
+def _():
+    # root_key_, rollout_key = jax.random.split(root_key)
+    # rollouts = {}
+    # for a in range(config["experiment"]["num_agent_seeds"]):
+    #     algo_ = PPO.create(**config["algorithm"])
+    #     train_state = load_ckpt(algo_, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[a], tag="best")
+    #     rollout_key, env_key = jax.random.split(rollout_key)
+    #     rollout = collect_rollouts(algo, train_state, env_key, env_name=config["algorithm"]["env"], env_config=config["algorithm"]["env_params"], num_envs=config["algorithm"]["num_envs"], max_steps_in_episode=1000)
+    #     rollouts[a] = rollout
+    return
 
 
 @app.cell
-def _(agents):
-    agents.shape
+def _(rollouts):
+    rollouts[0][2][1]
     return
 
 
 @app.cell
 def _():
+    # env = envs.create(env_name="ant", backend="positional")
+
+    # states = []
+    # for i in range(2):
+    #     print(i)
+    #     states.append(rollouts[0][2][1][i].state.pipeline_state)
+
+    # HTML(html.render(env, states))
     return
 
 
 @app.cell
-def _(trajectories):
-    trajectories.env_state.pipeline_state.q.shape
-    return
+def _(PPO, config, envs, html, jax, load_ckpt, train_states):
+    #@title Visualizing a trajectory of the learned inference function
+    import jax.numpy as jnp
+    # create an env with auto-reset
+    env = envs.create(env_name="ant", backend="positional")
+
+    jit_env_reset = jax.jit(env.reset)
+    jit_env_step = jax.jit(env.step)
+
+    algo0 = PPO.create(**config["algorithm"])
+    train_state = load_ckpt(algo0, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[0], tag="best")
+    inference_fn = algo0.make_act(train_state)
+    jit_inference_fn = jax.jit(inference_fn)
+
+    rollout = []
+    rng = jax.random.PRNGKey(seed=1)
+    state = jit_env_reset(rng=rng)
+    reward = 0
+    for _ in range(10000):
+      reward += state.reward
+      rollout.append(state.pipeline_state)
+      act_rng, rng = jax.random.split(rng)
+      act = jit_inference_fn(state.obs, act_rng)
+      state = jit_env_step(state, act)
+
+    html.save("/home/naren/Downloads/test.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
+    print(f"Saved: {reward}")
+    return (
+        act,
+        act_rng,
+        algo0,
+        env,
+        inference_fn,
+        jit_env_reset,
+        jit_env_step,
+        jit_inference_fn,
+        jnp,
+        reward,
+        rng,
+        rollout,
+        state,
+        train_state,
+    )
 
 
 @app.cell
-def _(HTML, envs, html, trajectories):
-    env = envs.create(env_name="ant")
-    HTML(html.render(env, trajectories.env_state.pipeline_state))
-    return (env,)
+def _(env, html, mo, rollout):
+    mo.Html(html.render(env.sys.tree_replace({'opt.timestep': env.dt}), rollout))
+    return
 
 
 @app.cell

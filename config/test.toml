@@ -1,15 +1,15 @@
 [experiment]
 name = "test_exp"
 root_seed = 42
-num_agent_seeds = 2
+num_agent_seeds = 10
 ckpt_dir = "ckpts"
 tags = ["test"]
 algorithm = "ppo"
-max_ckpt_to_keep = 2
+max_ckpt_to_keep = 5
 
 [algorithm]
 env = "brax/ant"
-total_timesteps = 2_000_000
+total_timesteps = 1_000_000
 eval_freq = 100_000
 num_envs = 100
 num_steps = 5

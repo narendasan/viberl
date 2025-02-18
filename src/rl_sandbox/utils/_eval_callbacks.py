@@ -20,6 +20,7 @@ import orbax.checkpoint as ocp
 
 from rejax.evaluate import EvalState
 import wandb
+from rl_sandbox.utils._checkpoints import generate_checkpointer_options
 from rl_sandbox.utils._readable_hash import generate_phrase_hash
 from rl_sandbox.utils.types import EvalCallback, PolicyEvalResult
 
@@ -99,6 +100,7 @@ def create_eval_logger() -> EvalCallback:
 
         def log(current_step: jax.Array, total_steps: int, mean_return: float, mean_length: float, id: jax.Array) -> None:
             _LOGGER.info(f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}")
+            print(f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}")
 
         jax.experimental.io_callback(
             log,
@@ -173,11 +175,7 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep:
     def checkpointer(algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
         def create_checkpoint(current_step: int, t: struct.PyTreeNode, e: PolicyEvalResult, id: jax.Array, total_timesteps: int) -> None:
             # TODO: Move this into rejax
-            options = ocp.checkpoint_manager.CheckpointManagerOptions(
-                best_fn = lambda x: x["mean_returns"],
-                best_mode="max",
-                max_to_keep=max_to_keep,
-            )
+            options = generate_checkpointer_options(max_to_keep=max_to_keep)
             with ocp.CheckpointManager(
                 exp_path / generate_phrase_hash(id[1]),
                 options=options,
