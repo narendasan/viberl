@@ -14,29 +14,22 @@ from rl_sandbox.env._trajectories import collect_trajectories
 from rl_sandbox.env._visualize import collect_rollouts
 from rl_sandbox.utils import (argparser, build_eval_callback,
                               create_checkpointer_from_config, create_eval_logger,
-                              create_wandb_logger, generate_experiment_config, load_ckpt)
+                              create_wandb_logger, generate_experiment_config, load_ckpt, setup_logger)
 
 
 parser = argparser()
 args = parser.parse_args()
 config = generate_experiment_config(args.config_file)
 
-os.makedirs(f"{os.getcwd()}/{config['experiment']['log_dir']}", exist_ok=True)
-logging.basicConfig(level=logging.INFO,
-    handlers = [
-        logging.FileHandler(f"{config['experiment']['log_dir']}/{config['experiment']['experiment_name']}.log"),
-        logging.StreamHandler()
-    ],
-    force=True, #Needed since orbax does some weird stuff
-)
+setup_logger(config)
 _LOGGER = logging.getLogger(__name__)
 
-# wandb.init(
-#     project="rl-sandbox",
-#     group=config["experiment"]["experiment_name"],
-#     tags=config["experiment"]["tags"],
-#     config=config
-# )
+wandb.init(
+    project="rl-sandbox",
+    group=config["experiment"]["experiment_name"],
+    tags=config["experiment"]["tags"],
+    config=config
+)
 # JAX handles reproducablity through the key system. Starting from a root key (can be thought of as a seed)
 # keys can be split to control PRNG across a vector of agents
 # Here we create N splits of the root key, one for each agent we will train
@@ -56,7 +49,8 @@ algo = algo.replace(eval_callback=build_eval_callback(algo, [
 
 _LOGGER.info("Training...")
 # We then can vectorize across NxM instances of agents and envs and train these in parallel
-vmap_train = jax.jit(jax.vmap(algo.train))
+# This can just be run as JIT, but further gains can be gotten from lowering and AOT compiling the training function
+vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
 train_states, results = vmap_train(agent_keys)
 print(results)
 

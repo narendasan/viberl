@@ -8,6 +8,7 @@ from rl_sandbox.utils._eval_callbacks import (
 )
 from rl_sandbox.utils._exp_manager import argparser, generate_experiment_config
 from rl_sandbox.utils._checkpoints import load_ckpt
+from rl_sandbox.utils._logger import setup_logger
 
 __all__ = [
     "build_eval_callback",
@@ -18,5 +19,6 @@ __all__ = [
     "types",
     "generate_experiment_config",
     "argparser",
-    "load_ckpt"
+    "load_ckpt",
+    "setup_logger"
 ]
