@@ -16,18 +16,27 @@ from rl_sandbox.utils import (argparser, build_eval_callback,
                               create_checkpointer_from_config, create_eval_logger,
                               create_wandb_logger, generate_experiment_config, load_ckpt)
 
-logging.basicConfig(level=logging.INFO)
 
 parser = argparser()
 args = parser.parse_args()
 config = generate_experiment_config(args.config_file)
 
-wandb.init(
-    project="rl-sandbox",
-    group=config["experiment"]["experiment_name"],
-    tags=config["experiment"]["tags"],
-    config=config
+os.makedirs(f"{os.getcwd()}/{config['experiment']['log_dir']}", exist_ok=True)
+logging.basicConfig(level=logging.INFO,
+    handlers = [
+        logging.FileHandler(f"{config['experiment']['log_dir']}/{config['experiment']['experiment_name']}.log"),
+        logging.StreamHandler()
+    ],
+    force=True, #Needed since orbax does some weird stuff
 )
+_LOGGER = logging.getLogger(__name__)
+
+# wandb.init(
+#     project="rl-sandbox",
+#     group=config["experiment"]["experiment_name"],
+#     tags=config["experiment"]["tags"],
+#     config=config
+# )
 # JAX handles reproducablity through the key system. Starting from a root key (can be thought of as a seed)
 # keys can be split to control PRNG across a vector of agents
 # Here we create N splits of the root key, one for each agent we will train
@@ -45,7 +54,7 @@ algo = algo.replace(eval_callback=build_eval_callback(algo, [
     create_checkpointer_from_config(config)
 ]))
 
-print("Training...")
+_LOGGER.info("Training...")
 # We then can vectorize across NxM instances of agents and envs and train these in parallel
 vmap_train = jax.jit(jax.vmap(algo.train))
 train_states, results = vmap_train(agent_keys)
@@ -72,6 +81,6 @@ for _ in range(10000):
     act = jit_inference_fn(state.obs, act_rng)
     state = jit_env_step(state, act)
 
-os.makedirs(f"{os.getcwd()}/results", exist_ok=True)
-html.save(f"{os.getcwd()}/results/{config['experiment']['experiment_name']}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
-print(f"Saved: {reward}")
+os.makedirs(f"{os.getcwd()}/{config['experiment']['results_dir']}", exist_ok=True)
+html.save(f"{os.getcwd()}/{config['experiment']['results_dir']}/{config['experiment']['experiment_name']}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
+_LOGGER.info(f"Saved: {reward}")

@@ -6,6 +6,8 @@ ckpt_dir = "ckpts"
 tags = ["test"]
 algorithm = "ppo"
 max_ckpt_to_keep = 5
+results_dir = "results"
+log_dir = "logs"
 
 [algorithm]
 env = "brax/ant"

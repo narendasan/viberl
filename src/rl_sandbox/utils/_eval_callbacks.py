@@ -53,8 +53,6 @@ To create your own callback:
 The callback will be called during training to evaluate policy performance.
 """
 
-_LOGGER = logging.getLogger(__name__)
-
 def build_eval_callback(algo_instance: Algorithm, fs: List[EvalCallback]) -> Callable[[Algorithm, struct.PyTreeNode, jax.Array], Tuple]:
     """Build an evaluation callback from a list of callback functions.
 
@@ -99,6 +97,7 @@ def create_eval_logger() -> EvalCallback:
     def eval_logger(a: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
 
         def log(current_step: jax.Array, total_steps: int, mean_return: float, mean_length: float, id: jax.Array) -> None:
+            _LOGGER = logging.getLogger(__name__)
             _LOGGER.info(f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}")
             print(f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}")
 
