@@ -5,6 +5,7 @@ from rl_sandbox.utils._eval_callbacks import (
     create_checkpointer_from_config,
     create_eval_logger,
     create_wandb_logger,
+    create_mlflow_logger
 )
 from rl_sandbox.utils._exp_manager import argparser, generate_experiment_config
 from rl_sandbox.utils._checkpoints import load_ckpt
@@ -15,6 +16,7 @@ __all__ = [
     "create_checkpointer",
     "create_checkpointer_from_config",
     "create_wandb_logger",
+    "create_mlflow_logger",
     "create_eval_logger",
     "types",
     "generate_experiment_config",

@@ -1,7 +1,7 @@
 [experiment]
-name = "test_exp"
+name = "test_experiment1"
 root_seed = 42
-num_agent_seeds = 10
+num_agent_seeds = 128
 ckpt_dir = "ckpts"
 tags = ["test"]
 algorithm = "ppo"
@@ -11,12 +11,12 @@ log_dir = "logs"
 
 [algorithm]
 env = "brax/ant"
-total_timesteps = 1_000_000
-eval_freq = 100_000
-num_envs = 100
-num_steps = 5
-num_epochs = 4
-num_minibatches = 4
+total_timesteps = 1_000_000_000
+eval_freq = 1_000_000
+num_envs = 256
+num_steps = 128
+num_epochs = 16
+num_minibatches = 16
 learning_rate = 0.0003
 max_grad_norm = 10
 gamma = 0.99

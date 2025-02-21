@@ -14,7 +14,7 @@ from rl_sandbox.env._trajectories import collect_trajectories
 from rl_sandbox.env._visualize import collect_rollouts
 from rl_sandbox.utils import (argparser, build_eval_callback,
                               create_checkpointer_from_config, create_eval_logger,
-                              create_wandb_logger, generate_experiment_config, load_ckpt, setup_logger)
+                              create_mlflow_logger, generate_experiment_config, load_ckpt, setup_logger)
 
 
 parser = argparser()
@@ -24,12 +24,12 @@ config = generate_experiment_config(args.config_file)
 setup_logger(config)
 _LOGGER = logging.getLogger(__name__)
 
-wandb.init(
-    project="rl-sandbox",
-    group=config["experiment"]["experiment_name"],
-    tags=config["experiment"]["tags"],
-    config=config
-)
+# wandb.init(
+#     project="rl-sandbox",
+#     group=config["experiment"]["experiment_name"],
+#     tags=config["experiment"]["tags"],
+#     config=config
+# )
 # JAX handles reproducablity through the key system. Starting from a root key (can be thought of as a seed)
 # keys can be split to control PRNG across a vector of agents
 # Here we create N splits of the root key, one for each agent we will train
@@ -43,7 +43,7 @@ algo = PPO.create(**config["algorithm"])
 # These transforms are functional so you get a new agent out instead of modifying in place
 algo = algo.replace(eval_callback=build_eval_callback(algo, [
     create_eval_logger(),
-    create_wandb_logger(),
+    create_mlflow_logger(config),
     create_checkpointer_from_config(config)
 ]))
 
