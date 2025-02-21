@@ -11,8 +11,8 @@ log_dir = "logs"
 
 [algorithm]
 env = "brax/ant"
-total_timesteps = 1_000_000_000
-eval_freq = 1_000_000
+total_timesteps = 10_000_000
+eval_freq = 100_000
 num_envs = 256
 num_steps = 128
 num_epochs = 16

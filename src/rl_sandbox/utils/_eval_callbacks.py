@@ -182,7 +182,7 @@ def create_mlflow_logger(config: Dict[str, Any]) -> EvalCallback:
     experiment_id = mlflow.create_experiment(config["experiment"]["experiment_name"])
     parent_run = mlflow.start_run(
         experiment_id=experiment_id,
-        #run_name=config['experiment']['experiment_name'],
+        run_name=config['experiment']['experiment_name'],
         #tags=config["experiment"]["tags"],
     )
 
