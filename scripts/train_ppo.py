@@ -1,21 +1,21 @@
-import os
 import logging
-from functools import partial
+import os
 
 import jax
-import jax.numpy as jnp
-from rejax import PPO
-
 from brax import envs
 from brax.io import html
+from rejax import PPO
 
-import wandb
-from rl_sandbox.env._trajectories import collect_trajectories
-from rl_sandbox.env._visualize import collect_rollouts
-from rl_sandbox.utils import (argparser, build_eval_callback,
-                              create_checkpointer_from_config, create_eval_logger,
-                              create_mlflow_logger, generate_experiment_config, load_ckpt, setup_logger)
-
+from rl_sandbox.utils import (
+    argparser,
+    build_eval_callback,
+    create_checkpointer_from_config,
+    create_eval_logger,
+    create_mlflow_logger,
+    generate_experiment_config,
+    load_ckpt,
+    setup_logger,
+)
 
 parser = argparser()
 args = parser.parse_args()

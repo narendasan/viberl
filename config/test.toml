@@ -1,7 +1,7 @@
 [experiment]
 name = "test_experiment1"
 root_seed = 42
-num_agent_seeds = 128
+num_agent_seeds = 16
 ckpt_dir = "ckpts"
 tags = ["test"]
 algorithm = "ppo"

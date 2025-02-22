@@ -6,23 +6,28 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    import marimo as mo
     import logging
     from functools import partial
 
     import jax
+    import marimo as mo
+    from brax import envs
+    from brax.io import html
+    from IPython.display import HTML
     from rejax import PPO
 
     import wandb
     from rl_sandbox.env._trajectories import collect_trajectories
     from rl_sandbox.env._visualize import collect_rollouts
-    from rl_sandbox.utils import (argparser, build_eval_callback,
-                                  create_checkpointer_from_config, create_eval_logger,
-                                  create_wandb_logger, generate_experiment_config, load_ckpt)
-
-    from brax import envs
-    from brax.io import html
-    from IPython.display import HTML
+    from rl_sandbox.utils import (
+        argparser,
+        build_eval_callback,
+        create_checkpointer_from_config,
+        create_eval_logger,
+        create_wandb_logger,
+        generate_experiment_config,
+        load_ckpt,
+    )
     return (
         HTML,
         PPO,
@@ -188,6 +193,7 @@ def _():
 def _(PPO, config, envs, html, jax, load_ckpt, train_states):
     #@title Visualizing a trajectory of the learned inference function
     import jax.numpy as jnp
+
     # create an env with auto-reset
     env = envs.create(env_name="ant", backend="positional")
 

@@ -1,6 +1,7 @@
-import os
-from typing import Dict, Any
 import logging
+import os
+from typing import Any, Dict
+
 
 def setup_logger(config: Dict[str,Any]) -> None:
     os.makedirs(f"{os.getcwd()}/{config['experiment']['log_dir']}", exist_ok=True)

@@ -2184,11 +2184,18 @@ dependencies = [
     { name = "evosax" },
     { name = "jax", extra = ["cuda12"] },
     { name = "jumanji" },
-    { name = "mlflow" },
     { name = "mnemonic" },
     { name = "orbax" },
     { name = "rejax" },
     { name = "tomli-w" },
+]
+
+[package.optional-dependencies]
+mlflow = [
+    { name = "mlflow" },
+]
+wandb = [
+    { name = "wandb" },
 ]
 
 [package.dev-dependencies]
@@ -2197,20 +2204,18 @@ dev = [
     { name = "marimo" },
     { name = "ruff" },
 ]
-wandb = [
-    { name = "wandb" },
-]
 
 [package.metadata]
 requires-dist = [
     { name = "evosax", specifier = ">=0.1.6" },
     { name = "jax", extras = ["cuda12"], specifier = ">=0.5.0" },
     { name = "jumanji", specifier = ">=1.1.0" },
-    { name = "mlflow", specifier = ">=2.20.2" },
+    { name = "mlflow", marker = "extra == 'mlflow'", specifier = ">=2.20.2" },
     { name = "mnemonic", specifier = ">=0.21" },
     { name = "orbax", specifier = ">=0.1.9" },
     { name = "rejax", editable = "../rejax" },
     { name = "tomli-w", specifier = ">=1.2.0" },
+    { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.19.6" },
 ]
 
 [package.metadata.requires-dev]
@@ -2219,7 +2224,6 @@ dev = [
     { name = "marimo", specifier = ">=0.11.5" },
     { name = "ruff", specifier = ">=0.9.5" },
 ]
-wandb = [{ name = "wandb", specifier = ">=0.19.6" }]
 
 [[package]]
 name = "rsa"
