@@ -25,7 +25,14 @@ def generate_checkpointer_options(max_to_keep: int=50) -> ocp.checkpoint_manager
     )
 
 
-def load_ckpt(algo: Algorithm, ckpt_dir: str, experiment_name: str, key: Optional[jax.Array]=None, run_name: Optional[str]=None, tag: str | int="best") -> struct.PyTreeNode:
+def load_ckpt(
+    algo: Algorithm,
+    ckpt_dir: str,
+    experiment_name: str,
+    key: Optional[jax.Array]=None,
+    run_name: Optional[str]=None,
+    tag: str | int="best",
+    rng: Optional[jax.Array] = None) -> struct.PyTreeNode:
     """Load a model checkpoint from disk.
 
     Args:
@@ -37,8 +44,14 @@ def load_ckpt(algo: Algorithm, ckpt_dir: str, experiment_name: str, key: Optiona
     Returns:
         struct.PyTreeNode: Loaded model checkpoint state
     """
-    ts = algo.init_state(key)
     options = generate_checkpointer_options()
+    if key is not None:
+        ts = algo.init_state(key)
+    elif rng is not None:
+        rng, _key = jax.random.split(rng)
+        ts = algo.init_state(jax.random.key_data(_key))
+    elif rng is None and key is None:
+        raise ValueError("Either key or rng must be provided")
 
     if key is not None and run_name is not None:
         raise ValueError("Both key and name cannot be provided")
@@ -71,7 +84,6 @@ def load_ckpt(algo: Algorithm, ckpt_dir: str, experiment_name: str, key: Optiona
 
         _LOGGER.info(f"Loaded checkpoint {tag} for {phrase_hash}: {train_state}")
 
-    print(train_state)
     return train_state
 
 def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep: int=50) -> EvalCallback:

@@ -10,7 +10,7 @@ results_dir = "results"
 log_dir = "logs"
 
 [algorithm]
-env = "brax/ant"
+env = "brax/walker2d"
 total_timesteps = 10_000_000
 eval_freq = 100_000
 num_envs = 256

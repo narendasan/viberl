@@ -54,7 +54,7 @@ vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
 train_states, results = vmap_train(agent_keys)
 print(results)
 
-env = envs.create(env_name="ant", backend="positional")
+env = envs.create(env_name="walker2d", backend="positional")
 
 jit_env_reset = jax.jit(env.reset)
 jit_env_step = jax.jit(env.step)
