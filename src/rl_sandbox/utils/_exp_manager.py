@@ -37,3 +37,10 @@ def argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     return parser
+
+def argparser_for_eval() -> argparse.ArgumentParser:
+    parser = argparser()
+    parser.add_argument("--seed-name", type=str)
+    parser.add_argument("--experiment", type=str)
+    parser.add_argument("--step", type=str, default="best")
+    return parser

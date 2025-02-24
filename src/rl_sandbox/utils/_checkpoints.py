@@ -31,7 +31,7 @@ def load_ckpt(
     experiment_name: str,
     key: Optional[jax.Array]=None,
     run_name: Optional[str]=None,
-    tag: str | int="best",
+    step: str | int="best",
     rng: Optional[jax.Array] = None) -> struct.PyTreeNode:
     """Load a model checkpoint from disk.
 
@@ -39,7 +39,7 @@ def load_ckpt(
         ckpt_dir (str): Checkpoint directory path
         experiment_name (str): Name of the experiment
         key (jax.Array): JAX random key array
-        tag (Union[str, int], optional): Tag identifier for the checkpoint. Defaults to "best", also accepts "latest" or a integer which represents the step.
+        step (Union[str, int], optional): Tag identifier for the checkpoint. Defaults to "best", also accepts "latest" or a integer which represents the step.
 
     Returns:
         struct.PyTreeNode: Loaded model checkpoint state
@@ -71,18 +71,18 @@ def load_ckpt(
 
     with jax.default_device(jax.devices('gpu')[0]):
         with ocp.CheckpointManager(ckpt_dir_path / experiment_name / phrase_hash, options=options) as ocp_checkpointer:
-            if tag == "best":
+            if step == "best":
                 train_state = ocp_checkpointer.restore(ocp_checkpointer.best_step(), args=ocp.args.StandardRestore(ts))
-            elif tag == "latest":
+            elif step == "latest":
                 train_state = ocp_checkpointer.restore(ocp_checkpointer.latest_step(), args=ocp.args.StandardRestore(ts))
-            elif isinstance(tag, int):
-                train_state = ocp_checkpointer.restore(tag, args=ocp.args.StandardRestore(ts))
-            elif isinstance(tag, str) and tag.isdigit():
-                train_state = ocp_checkpointer.restore(int(tag), args=ocp.args.StandardRestore(ts))
+            elif isinstance(step, int):
+                train_state = ocp_checkpointer.restore(step, args=ocp.args.StandardRestore(ts))
+            elif isinstance(step, str) and step.isdigit():
+                train_state = ocp_checkpointer.restore(int(step), args=ocp.args.StandardRestore(ts))
             else:
-                raise ValueError(f"Invalid tag: {tag}, must be 'best', 'latest', an integer, or a string representing an integer")
+                raise ValueError(f"Invalid step: {step}, must be 'best', 'latest', an integer, or a string representing an integer")
 
-        _LOGGER.info(f"Loaded checkpoint {tag} for {phrase_hash}: {train_state}")
+        _LOGGER.info(f"Loaded checkpoint {step} for {phrase_hash}: {train_state}")
 
     return train_state
 
