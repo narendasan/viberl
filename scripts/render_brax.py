@@ -27,8 +27,7 @@ root_key = jax.random.key(config["experiment"]["root_seed"])
 setup_logger(config)
 _LOGGER = logging.getLogger(__name__)
 
-env = envs.create(env_name="walker2d", backend="positional")
-
+env = envs.create(env_name=config["algorithm"]["env"].split("/")[1], backend=config["algorithm"]["env_params"]["backend"])
 jit_env_reset = jax.jit(env.reset)
 jit_env_step = jax.jit(env.step)
 
@@ -57,4 +56,4 @@ for _ in range(10000):
 
 os.makedirs(f"{os.getcwd()}/{config['experiment']['results_dir']}", exist_ok=True)
 html.save(f"{os.getcwd()}/{config['experiment']['results_dir']}/{args.seed_name}_{args.step}_{args.experiment}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
-_LOGGER.info(f"Saved: {reward}")
+_LOGGER.info(f"Saved [{args.seed_name} (step: {args.step})]: Reward: {reward}")

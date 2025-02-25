@@ -1,0 +1,29 @@
+[experiment]
+name = "gymnax_experiment1"
+root_seed = 42
+num_agent_seeds = 16
+ckpt_dir = "ckpts"
+tags = ["test"]
+algorithm = "ppo"
+max_ckpt_to_keep = 5
+results_dir = "results"
+log_dir = "logs"
+
+[algorithm]
+env = "Breakout-MinAtar"
+total_timesteps = 1_000_000_000
+eval_freq = 100_000
+num_envs = 256
+num_steps = 128
+num_epochs = 16
+num_minibatches = 16
+learning_rate = 0.0003
+max_grad_norm = 10
+gamma = 0.99
+gae_lambda = 0.95
+clip_eps = 0.2
+vf_coef = 0.5
+ent_coef = 0.01
+
+[algorithm.agent_kwargs]
+activation = "relu"

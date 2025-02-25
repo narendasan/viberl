@@ -53,28 +53,3 @@ _LOGGER.info("Training...")
 vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
 train_states, results = vmap_train(agent_keys)
 print(results)
-
-env = envs.create(env_name="walker2d", backend="positional")
-
-jit_env_reset = jax.jit(env.reset)
-jit_env_step = jax.jit(env.step)
-
-algo0 = PPO.create(**config["algorithm"])
-train_state = load_ckpt(algo0, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[0], tag="best")
-inference_fn = algo0.make_act(train_state)
-jit_inference_fn = jax.jit(inference_fn)
-
-rollout = []
-rng = jax.random.PRNGKey(seed=1)
-state = jit_env_reset(rng=rng)
-reward = 0
-for _ in range(10000):
-    reward += state.reward
-    rollout.append(state.pipeline_state)
-    act_rng, rng = jax.random.split(rng)
-    act = jit_inference_fn(state.obs, act_rng)
-    state = jit_env_step(state, act)
-
-os.makedirs(f"{os.getcwd()}/{config['experiment']['results_dir']}", exist_ok=True)
-html.save(f"{os.getcwd()}/{config['experiment']['results_dir']}/{config['experiment']['experiment_name']}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
-_LOGGER.info(f"Saved: {reward}")
