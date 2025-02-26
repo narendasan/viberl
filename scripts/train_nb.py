@@ -1,43 +1,39 @@
 import marimo
 
-__generated_with = "0.11.5"
+__generated_with = "0.11.7"
 app = marimo.App(width="full")
 
 
 @app.cell
 def _():
+    import marimo as mo
     import logging
-    from functools import partial
+    import os
 
     import jax
-    import marimo as mo
     from brax import envs
     from brax.io import html
-    from IPython.display import HTML
     from rejax import PPO
+    import time
 
-    import wandb
-    from rl_sandbox.env._trajectories import collect_trajectories
-    from rl_sandbox.env._visualize import collect_rollouts
     from rl_sandbox.utils import (
         argparser,
         build_eval_callback,
         create_checkpointer_from_config,
         create_eval_logger,
-        create_wandb_logger,
+        create_mlflow_logger,
         generate_experiment_config,
         load_ckpt,
+        setup_logger,
     )
+    from rl_sandbox.env import render_gymnax
     return (
-        HTML,
         PPO,
         argparser,
         build_eval_callback,
-        collect_rollouts,
-        collect_trajectories,
         create_checkpointer_from_config,
         create_eval_logger,
-        create_wandb_logger,
+        create_mlflow_logger,
         envs,
         generate_experiment_config,
         html,
@@ -45,9 +41,48 @@ def _():
         load_ckpt,
         logging,
         mo,
-        partial,
-        wandb,
+        os,
+        render_gymnax,
+        setup_logger,
+        time,
     )
+
+
+@app.cell
+def _(time):
+    config = {
+        'experiment': {
+            'root_seed': 42, 
+            'num_agent_seeds': 16, 
+            'ckpt_dir': 'ckpts', 
+            'tags': ['test'], 
+            'algorithm': 'ppo', 
+            'max_ckpt_to_keep': 5, 
+            'results_dir': 'results', 
+            'log_dir': 'logs', 
+            'experiment_name': f"gymnax_experiment1-{time.time()}-seed42-steps1000000000-lr0.0003-test"
+        }, 
+        'algorithm': {
+            'env': 'gymnax/Breakout-MinAtar', 
+            'total_timesteps': 10000000, 
+            'eval_freq': 100000, 
+            'num_envs': 256, 
+            'num_steps': 128, 
+            'num_epochs': 16, 
+            'num_minibatches': 16, 
+            'learning_rate': 0.0003, 
+            'max_grad_norm': 10, 
+            'gamma': 0.99, 
+            'gae_lambda': 0.95, 
+            'clip_eps': 0.2, 
+            'vf_coef': 0.5, 
+            'ent_coef': 0.01, 
+            'agent_kwargs': {
+                'activation': 'relu'
+            }
+        }
+    }
+    return (config,)
 
 
 @app.cell
@@ -55,20 +90,6 @@ def _(jax):
     print(jax.default_backend())
     print(jax.local_devices())
     return
-
-
-@app.cell
-def _(generate_experiment_config, logging, wandb):
-    logging.basicConfig(level=logging.DEBUG)
-    config = generate_experiment_config("config/test.toml")
-
-    wandb.init(
-        project="rl-sandbox",
-        group=config["experiment"]["experiment_name"],
-        tags=config["experiment"]["tags"],
-        config=config
-    )
-    return (config,)
 
 
 @app.cell(hide_code=True)
@@ -114,11 +135,11 @@ def _(
     config,
     create_checkpointer_from_config,
     create_eval_logger,
-    create_wandb_logger,
+    create_mlflow_logger,
 ):
     algo_w_callback = algo.replace(eval_callback=build_eval_callback(algo, [
         create_eval_logger(),
-        create_wandb_logger(),
+        create_mlflow_logger(config),
         create_checkpointer_from_config(config)
     ]))
     return (algo_w_callback,)
@@ -131,115 +152,50 @@ def _(mo):
 
 
 @app.cell
-def _(agent_keys, algo_w_callback, jax):
-    vmap_train = jax.jit(jax.vmap(algo_w_callback.train))
+def _(agent_keys, algo, jax):
+    vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
+    return (vmap_train,)
+
+
+@app.cell
+def _(agent_keys, vmap_train):
     train_states, results = vmap_train(agent_keys)
-    return results, train_states, vmap_train
+    print(results)
+    return results, train_states
 
 
 @app.cell
-def _(collect_trajectories, config, partial):
-    vmap_collect_trajectories = partial(collect_trajectories, env_name=config["algorithm"]["env"], env_config=config["algorithm"]["env_params"], num_envs=config["algorithm"]["num_envs"], max_steps_in_episode=1000)
-    return (vmap_collect_trajectories,)
+def _(algo_w_callback, config, jax, train_states):
+    policy_fn = algo_w_callback.make_act(train_states)
 
+    from typing import Callable, Tuple
+    from jax import numpy as jnp
+    def make_policy_fn(policy_fn: Callable[[jax.Array, jax.Array], jax.Array], eval_index: int) -> Callable[[jax.Array, jax.Array], jax.Array]:
+        def wrapped_policy_fn(input: jax.Array, key: jax.Array) -> jax.Array:
+            unsqueezed_input = jnp.expand_dims(input, 0)
+            expanded_input = jnp.tile(unsqueezed_input, (config["experiment"]["num_agent_seeds"], 1, 1, 1))
+            print(expanded_input.shape)
+            act = policy_fn(expanded_input, key)
+            return act[eval_index]
+        return wrapped_policy_fn
 
-@app.cell
-def _():
-    #t_results, trajectories = jax.vmap(vmap_collect_trajectories)(agents, train_states, agent_keys)
-    return
-
-
-@app.cell
-def _(a, jax, train_states):
-    train_states.seed[a]
-    import numpy as np
-    jax.random.key_data(train_states.seed[0])
-    return (np,)
-
-
-@app.cell
-def _():
-    # root_key_, rollout_key = jax.random.split(root_key)
-    # rollouts = {}
-    # for a in range(config["experiment"]["num_agent_seeds"]):
-    #     algo_ = PPO.create(**config["algorithm"])
-    #     train_state = load_ckpt(algo_, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[a], tag="best")
-    #     rollout_key, env_key = jax.random.split(rollout_key)
-    #     rollout = collect_rollouts(algo, train_state, env_key, env_name=config["algorithm"]["env"], env_config=config["algorithm"]["env_params"], num_envs=config["algorithm"]["num_envs"], max_steps_in_episode=1000)
-    #     rollouts[a] = rollout
-    return
-
-
-@app.cell
-def _(rollouts):
-    rollouts[0][2][1]
-    return
-
-
-@app.cell
-def _():
-    # env = envs.create(env_name="ant", backend="positional")
-
-    # states = []
-    # for i in range(2):
-    #     print(i)
-    #     states.append(rollouts[0][2][1][i].state.pipeline_state)
-
-    # HTML(html.render(env, states))
-    return
-
-
-@app.cell
-def _(PPO, config, envs, html, jax, load_ckpt, train_states):
-    #@title Visualizing a trajectory of the learned inference function
-    import jax.numpy as jnp
-
-    # create an env with auto-reset
-    env = envs.create(env_name="ant", backend="positional")
-
-    jit_env_reset = jax.jit(env.reset)
-    jit_env_step = jax.jit(env.step)
-
-    algo0 = PPO.create(**config["algorithm"])
-    train_state = load_ckpt(algo0, config["experiment"]["ckpt_dir"], config["experiment"]["experiment_name"], key=train_states.seed[0], tag="best")
-    inference_fn = algo0.make_act(train_state)
-    jit_inference_fn = jax.jit(inference_fn)
-
-    rollout = []
-    rng = jax.random.PRNGKey(seed=1)
-    state = jit_env_reset(rng=rng)
-    reward = 0
-    for _ in range(10000):
-      reward += state.reward
-      rollout.append(state.pipeline_state)
-      act_rng, rng = jax.random.split(rng)
-      act = jit_inference_fn(state.obs, act_rng)
-      state = jit_env_step(state, act)
-
-    html.save("/home/naren/Downloads/test.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
-    print(f"Saved: {reward}")
+    squeezed_policy_fn = make_policy_fn(policy_fn, 0)   
+    jit_policy_fn = jax.jit(squeezed_policy_fn)
     return (
-        act,
-        act_rng,
-        algo0,
-        env,
-        inference_fn,
-        jit_env_reset,
-        jit_env_step,
-        jit_inference_fn,
+        Callable,
+        Tuple,
+        jit_policy_fn,
         jnp,
-        reward,
-        rng,
-        rollout,
-        state,
-        train_state,
+        make_policy_fn,
+        policy_fn,
+        squeezed_policy_fn,
     )
 
 
 @app.cell
-def _(env, html, mo, rollout):
-    mo.Html(html.render(env.sys.tree_replace({'opt.timestep': env.dt}), rollout))
-    return
+def _(config, render_gymnax, root_key, squeezed_policy_fn):
+    vis, reward = render_gymnax(squeezed_policy_fn, config, root_key)
+    return reward, vis
 
 
 @app.cell

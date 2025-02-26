@@ -1,5 +1,5 @@
 [experiment]
-name = "test_experiment1"
+name = "brax_experiment1"
 root_seed = 42
 num_agent_seeds = 16
 ckpt_dir = "ckpts"

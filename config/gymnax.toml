@@ -10,7 +10,7 @@ results_dir = "results"
 log_dir = "logs"
 
 [algorithm]
-env = "Breakout-MinAtar"
+env = "gymnax/Breakout-MinAtar"
 total_timesteps = 1_000_000_000
 eval_freq = 100_000
 num_envs = 256

@@ -47,9 +47,11 @@ algo = algo.replace(eval_callback=build_eval_callback(algo, [
     create_checkpointer_from_config(config)
 ]))
 
-_LOGGER.info("Training...")
 # We then can vectorize across NxM instances of agents and envs and train these in parallel
 # This can just be run as JIT, but further gains can be gotten from lowering and AOT compiling the training function
+_LOGGER.info("Compiling training function...")
 vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
+
+_LOGGER.info("Training...")
 train_states, results = vmap_train(agent_keys)
 print(results)
