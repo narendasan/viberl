@@ -165,36 +165,19 @@ def _(agent_keys, vmap_train):
 
 
 @app.cell
-def _(algo_w_callback, config, jax, train_states):
+def _(algo_w_callback, jax, train_states):
+    from rl_sandbox.utils import tree_unstack
+
+    train_state = tree_unstack(train_states)[0]
+
     policy_fn = algo_w_callback.make_act(train_states)
-
-    from typing import Callable, Tuple
-    from jax import numpy as jnp
-    def make_policy_fn(policy_fn: Callable[[jax.Array, jax.Array], jax.Array], eval_index: int) -> Callable[[jax.Array, jax.Array], jax.Array]:
-        def wrapped_policy_fn(input: jax.Array, key: jax.Array) -> jax.Array:
-            unsqueezed_input = jnp.expand_dims(input, 0)
-            expanded_input = jnp.tile(unsqueezed_input, (config["experiment"]["num_agent_seeds"], 1, 1, 1))
-            print(expanded_input.shape)
-            act = policy_fn(expanded_input, key)
-            return act[eval_index]
-        return wrapped_policy_fn
-
-    squeezed_policy_fn = make_policy_fn(policy_fn, 0)   
-    jit_policy_fn = jax.jit(squeezed_policy_fn)
-    return (
-        Callable,
-        Tuple,
-        jit_policy_fn,
-        jnp,
-        make_policy_fn,
-        policy_fn,
-        squeezed_policy_fn,
-    )
+    jit_policy_fn = jax.jit(policy_fn)
+    return jit_policy_fn, policy_fn, train_state, tree_unstack
 
 
 @app.cell
-def _(config, render_gymnax, root_key, squeezed_policy_fn):
-    vis, reward = render_gymnax(squeezed_policy_fn, config, root_key)
+def _(config, jit_policy_fn, render_gymnax, root_key):
+    vis, reward = render_gymnax(jit_policy_fn, config, root_key)
     return reward, vis
 
 

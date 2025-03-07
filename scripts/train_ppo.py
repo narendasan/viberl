@@ -1,10 +1,13 @@
 import logging
 import os
 
+from flax.typing import A
 import jax
 from brax import envs
 from brax.io import html
+from orbax.checkpoint import tree
 from rejax import PPO
+from wandb import agent
 
 from rl_sandbox.utils import (
     argparser,
@@ -16,6 +19,8 @@ from rl_sandbox.utils import (
     load_ckpt,
     setup_logger,
 )
+from rl_sandbox.utils import tree_unstack
+from rl_sandbox.env import (render_brax, render_gymnax)
 
 parser = argparser()
 args = parser.parse_args()
@@ -55,3 +60,9 @@ vmap_train = jax.jit(jax.vmap(algo.train)).lower(agent_keys).compile()
 _LOGGER.info("Training...")
 train_states, results = vmap_train(agent_keys)
 print(results)
+agent_ts = tree_unstack(train_states)
+
+policy = algo.make_act(agent_ts[0])
+jit_policy = jax.jit(policy)
+vis, reward = render_gymnax(jit_policy, config, root_key)
+vis.animate(f"{os.getcwd()}/{config['experiment']['results_dir']}/train_ppo.gif")

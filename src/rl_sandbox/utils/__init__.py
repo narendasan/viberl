@@ -11,6 +11,8 @@ from rl_sandbox.utils._eval_callbacks import (
 from rl_sandbox.utils._exp_manager import argparser, argparser_for_eval, generate_experiment_config
 from rl_sandbox.utils._logger import setup_logger
 
+from rl_sandbox.utils._pytrees import tree_stack, tree_unstack
+
 __all__ = [
     "build_eval_callback",
     "create_checkpointer",
@@ -21,7 +23,9 @@ __all__ = [
     "argparser",
     "argparser_for_eval",
     "load_ckpt",
-    "setup_logger"
+    "setup_logger",
+    "tree_stack",
+    "tree_unstack"
 ]
 
 
