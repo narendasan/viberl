@@ -1,13 +1,11 @@
 import logging
 import os
 
-from flax.typing import A
 import jax
 from brax import envs
 from brax.io import html
 from orbax.checkpoint import tree
 from rejax import PPO
-from wandb import agent
 
 from rl_sandbox.utils import (
     argparser,
