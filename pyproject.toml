@@ -1,13 +1,14 @@
 [project]
-name = "rl-sandbox"
+name = "viberl"
 version = "0.1.0"
-description = "Add your description here"
+description = "A toolbox for prototyping new RL approaches"
 readme = "README.md"
 authors = [{ name = "Naren Dasan", email = "naren@narendasan.com" }]
 requires-python = ">=3.11"
 dependencies = [
     "evosax>=0.1.6",
-    "jax[cuda12]>=0.5.0",
+    "jax[cuda12]>=0.5.0; sys_platform == 'linux'",
+    "jax[cpu]>=0.5.0; sys_platform == 'linux'",
     "jumanji>=1.1.0",
     "mnemonic>=0.21",
     "orbax>=0.1.9",
@@ -15,6 +16,7 @@ dependencies = [
     "tomli-w>=1.2.0",
     "ribs>=0.7.1",
 ]
+license = "NCSA"
 
 [project.optional-dependencies]
 wandb = ["wandb>=0.19.6"]

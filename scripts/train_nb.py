@@ -16,7 +16,7 @@ def _():
     from rejax import PPO
     import time
 
-    from rl_sandbox.utils import (
+    from viberl.utils import (
         argparser,
         build_eval_callback,
         create_checkpointer_from_config,
@@ -26,7 +26,7 @@ def _():
         load_ckpt,
         setup_logger,
     )
-    from rl_sandbox.env import render_gymnax
+    from viberl.env import render_gymnax
     return (
         PPO,
         argparser,
@@ -52,31 +52,31 @@ def _():
 def _(time):
     config = {
         'experiment': {
-            'root_seed': 42, 
-            'num_agent_seeds': 16, 
-            'ckpt_dir': 'ckpts', 
-            'tags': ['test'], 
-            'algorithm': 'ppo', 
-            'max_ckpt_to_keep': 5, 
-            'results_dir': 'results', 
-            'log_dir': 'logs', 
+            'root_seed': 42,
+            'num_agent_seeds': 16,
+            'ckpt_dir': 'ckpts',
+            'tags': ['test'],
+            'algorithm': 'ppo',
+            'max_ckpt_to_keep': 5,
+            'results_dir': 'results',
+            'log_dir': 'logs',
             'experiment_name': f"gymnax_experiment1-{time.time()}-seed42-steps1000000000-lr0.0003-test"
-        }, 
+        },
         'algorithm': {
-            'env': 'gymnax/Breakout-MinAtar', 
-            'total_timesteps': 10000000, 
-            'eval_freq': 100000, 
-            'num_envs': 256, 
-            'num_steps': 128, 
-            'num_epochs': 16, 
-            'num_minibatches': 16, 
-            'learning_rate': 0.0003, 
-            'max_grad_norm': 10, 
-            'gamma': 0.99, 
-            'gae_lambda': 0.95, 
-            'clip_eps': 0.2, 
-            'vf_coef': 0.5, 
-            'ent_coef': 0.01, 
+            'env': 'gymnax/Breakout-MinAtar',
+            'total_timesteps': 10000000,
+            'eval_freq': 100000,
+            'num_envs': 256,
+            'num_steps': 128,
+            'num_epochs': 16,
+            'num_minibatches': 16,
+            'learning_rate': 0.0003,
+            'max_grad_norm': 10,
+            'gamma': 0.99,
+            'gae_lambda': 0.95,
+            'clip_eps': 0.2,
+            'vf_coef': 0.5,
+            'ent_coef': 0.01,
             'agent_kwargs': {
                 'activation': 'relu'
             }
@@ -166,7 +166,7 @@ def _(agent_keys, vmap_train):
 
 @app.cell
 def _(algo_w_callback, jax, train_states):
-    from rl_sandbox.utils import tree_unstack
+    from viberl.utils import tree_unstack
 
     train_state = tree_unstack(train_states)[0]
 

@@ -7,7 +7,7 @@ from brax.io import html
 from orbax.checkpoint import tree
 from rejax import PPO
 
-from rl_sandbox.utils import (
+from viberl.utils import (
     argparser,
     build_eval_callback,
     create_checkpointer_from_config,
@@ -17,8 +17,8 @@ from rl_sandbox.utils import (
     load_ckpt,
     setup_logger,
 )
-from rl_sandbox.utils import tree_unstack
-from rl_sandbox.env import (render_brax, render_gymnax)
+from viberl.utils import tree_unstack
+from viberl.env import (render_brax, render_gymnax)
 
 parser = argparser()
 args = parser.parse_args()

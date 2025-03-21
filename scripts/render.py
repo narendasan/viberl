@@ -11,7 +11,7 @@ from mlflow.protos.service_pb2 import Run
 from numpy.core.numeric import roll
 from rejax import PPO
 
-from rl_sandbox.utils import (
+from viberl.utils import (
     argparser_for_eval,
     build_eval_callback,
     create_checkpointer_from_config,
@@ -21,7 +21,7 @@ from rl_sandbox.utils import (
     load_ckpt,
     setup_logger,
 )
-from rl_sandbox.env import (render_brax, render_gymnax)
+from viberl.env import (render_brax, render_gymnax)
 
 parser = argparser_for_eval()
 args = parser.parse_args()
