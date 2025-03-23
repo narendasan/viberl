@@ -1,7 +1,7 @@
 # VibeRL
 
 VibeRL is a toolkit for reinforcement learning, designed to facilitate the use of standalone RL implementations such as CleanRL and ReJAX in experiments primarily in JAX.
-It provides common utilities for checkpointing, logging, and visualization of RL policies focusing on vmaped training loops allowing researches to concurrently evaluate multiple experiment configurations side by side.
+It provides common utilities for checkpointing, logging, and visualization of RL policies focusing on vmaped training loops allowing researchers to concurrently evaluate multiple experiment configurations side by side.
 
 ## Installation
 
