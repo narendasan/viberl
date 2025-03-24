@@ -7,7 +7,7 @@ from flax import struct
 from rejax import Algorithm
 from rejax.compat import create as create_env
 
-from rl_sandbox.utils.types import PolicyEvalResult, PolicyFn
+from viberl.utils.types import PolicyEvalResult, PolicyFn
 
 
 @struct.dataclass

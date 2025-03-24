@@ -6,8 +6,8 @@ from flax import struct
 from rejax.algos import Algorithm
 
 import wandb
-from rl_sandbox.utils._readable_hash import generate_phrase_hash
-from rl_sandbox.utils.types import EvalCallback, PolicyEvalResult
+from viberl.utils._readable_hash import generate_phrase_hash
+from viberl.utils.types import EvalCallback, PolicyEvalResult
 
 
 def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
