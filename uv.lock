@@ -1,15 +1,19 @@
 version = 1
+revision = 1
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'linux'",
     "python_version < '0'",
-    "python_full_version >= '3.13' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version >= '3.13' and sys_platform == 'darwin'",
+    "python_full_version >= '3.13' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'",
     "python_full_version >= '3.13' and sys_platform == 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'linux'",
-    "python_full_version == '3.12.*' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version == '3.12.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.12.*' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'",
     "python_full_version == '3.12.*' and sys_platform == 'win32'",
     "python_full_version < '3.12' and sys_platform == 'linux'",
-    "python_full_version < '3.12' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version < '3.12' and sys_platform == 'darwin'",
+    "python_full_version < '3.12' and sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32'",
     "python_full_version < '3.12' and sys_platform == 'win32'",
 ]
 
@@ -1140,7 +1144,7 @@ wheels = [
 
 [[package]]
 name = "marimo"
-version = "0.11.26"
+version = "0.11.30"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "click" },
@@ -1161,9 +1165,9 @@ dependencies = [
     { name = "uvicorn" },
     { name = "websockets" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/72/53/073592d7c1d87716529b9901b4bb77b87868c99d010314239578dc8e6d9c/marimo-0.11.26.tar.gz", hash = "sha256:9435dc83a4c5e69d6050519a4327d5f3c340e5a8a7c33f888e964c01261b76d7", size = 10682435 }
+sdist = { url = "https://files.pythonhosted.org/packages/62/2c/07dc741cdef60ed7dbc10cd268f9a0c8667620c98ef39d0bb1dcffb590f0/marimo-0.11.30.tar.gz", hash = "sha256:ec7a6f65524bfdcd85cdc80cec8f9b253aae15f0209fde86e4a866eaf17d6d34", size = 10694287 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/68/eb/f8ff1b0da191aaf1629b904de7d5a90477eb32235dad6a2ac2208d640d16/marimo-0.11.26-py3-none-any.whl", hash = "sha256:cb112552eadd43937101eebb2822bf37457a9504de64de5519e9edcc4b3bd921", size = 11029647 },
+    { url = "https://files.pythonhosted.org/packages/8f/11/a8a7c292e11ed3adfc7e079c6962b1e96cb1d42b8724f419a1f134d80447/marimo-0.11.30-py3-none-any.whl", hash = "sha256:b43bc477b21d9f4129e8f9bacfb9abf7f784ce27b7861f66f79f56f4d1f82ade", size = 11044904 },
 ]
 
 [[package]]
@@ -2201,6 +2205,7 @@ requires-dist = [
     { name = "optax", specifier = ">=0.2.3" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
+provides-extras = ["compat"]
 
 [[package]]
 name = "requests"
@@ -2787,6 +2792,7 @@ requires-dist = [
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.19.6" },
 ]
+provides-extras = ["wandb", "mlflow"]
 
 [package.metadata.requires-dev]
 dev = [

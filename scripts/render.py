@@ -2,21 +2,11 @@ import logging
 import os
 
 from brax.io import html
-from gymnax.visualize import Visualizer
-import gymnax
 import jax
-from jax import numpy as jnp
-from marimo._ast.app import R
-from mlflow.protos.service_pb2 import Run
-from numpy.core.numeric import roll
 from rejax import PPO
 
 from viberl.utils import (
     argparser_for_eval,
-    build_eval_callback,
-    create_checkpointer_from_config,
-    create_eval_logger,
-    create_mlflow_logger,
     generate_experiment_config,
     load_ckpt,
     setup_logger,
