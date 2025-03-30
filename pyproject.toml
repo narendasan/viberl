@@ -8,7 +8,7 @@ requires-python = ">=3.11"
 dependencies = [
     "evosax>=0.1.6",
     "jax[cuda12]>=0.5.0; sys_platform == 'linux'",
-    "jax[cpu]>=0.5.0; sys_platform == 'darwin'",
+    "jax>=0.5.0; sys_platform == 'darwin'",
     "jumanji>=1.1.0",
     "mnemonic>=0.21",
     "orbax>=0.1.9",
@@ -26,8 +26,7 @@ mlflow = ["mlflow>=2.20.2"]
 dev = ["isort>=6.0.0", "ruff>=0.9.5", "marimo>=0.11.5"]
 
 [tool.uv.sources]
-rejax = { path = "../rejax", editable = true }
-
+rejax = {path = "../rejax", editable = true}
 
 [tool.ruff]
 # NOTE: Synchoronize the ignores with .flake8
@@ -88,7 +87,7 @@ lint.select = [
     # Not included in flake8
     "PERF",
     "PLE",
-    "TRY302",
+    "TRY203",
 ]
 
 # Allow unused variables when underscore-prefixed.
