@@ -4,7 +4,8 @@ import os
 import flax
 import jax
 import jax.numpy as jnp
-from rejax import PPO
+#from rejax import PPO
+from viberl.algorithms._vppo import PPO
 
 from viberl.env import render_gymnax
 from viberl.utils import (
