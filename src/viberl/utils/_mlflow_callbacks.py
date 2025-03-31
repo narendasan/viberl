@@ -30,37 +30,45 @@ def create_mlflow_logger(config: Dict[str, Any]) -> EvalCallback:
     experiment_id = mlflow.create_experiment(config["experiment"]["experiment_name"])
     parent_run = mlflow.start_run(
         experiment_id=experiment_id,
-        run_name=config['experiment']['experiment_name'],
-        #tags=config["experiment"]["tags"],
+        run_name=config["experiment"]["experiment_name"],
+        # tags=config["experiment"]["tags"],
     )
 
-    def mlflow_logger(a: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
-        def log(id: jax.Array, step: int, data: Dict[str, float]) -> None:
+    def mlflow_logger(
+        a: Algorithm,
+        train_state: struct.PyTreeNode,
+        key: jax.Array,
+        eval_results: PolicyEvalResult,
+    ) -> Tuple:
+        def log(id: jax.Array, step: jax.Array, data: Dict[str, float]) -> None:
             shard_id = generate_phrase_hash(id[1])
             if shard_id not in mlflow_runs:
                 with parent_run:
                     run = mlflow.start_run(
                         experiment_id=experiment_id,
                         run_name=f"{shard_id}-{config['experiment']['experiment_name']}",
-                        #tags=config["experiment"]["tags"],
+                        # tags=config["experiment"]["tags"],
                         nested=True,
-                        parent_run_id=parent_run.info.run_id
+                        parent_run_id=parent_run.info.run_id,
                     )
                     mlflow_runs[shard_id] = run.info.run_id
                     mlflow.log_params(config, run_id=mlflow_runs[shard_id])
 
             mlflow.log_metrics(data, step=step.item(), run_id=mlflow_runs[shard_id])
 
-
         jax.experimental.io_callback(
             log,
             (),  # result_shape_dtypes (wandb.log returns None)
             copy.deepcopy(train_state.seed),
             train_state.global_step,
-            {"mean_episode_length": eval_results.lengths.mean(), "mean_return": eval_results.returns.mean()},
+            {
+                "mean_episode_length": eval_results.lengths.mean(),
+                "mean_return": eval_results.returns.mean(),
+            },
         )
 
         # Since we log to wandb, we don't want to return anything that is collected
         # throughout training
         return ()
+
     return mlflow_logger

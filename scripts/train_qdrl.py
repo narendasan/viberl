@@ -1,17 +1,17 @@
 import logging
 import os
 
-import jax
-from rejax import PPO
 import flax
+import jax
 import jax.numpy as jnp
+from rejax import PPO
 
+from viberl.env import render_gymnax
 from viberl.utils import (
     argparser,
     generate_experiment_config,
     setup_logger,
 )
-from viberl.env import (render_gymnax)
 
 parser = argparser()
 args = parser.parse_args()
@@ -20,7 +20,7 @@ config = generate_experiment_config(args.config_file)
 setup_logger(config)
 _LOGGER = logging.getLogger(__name__)
 
-#Use PRNGKey since theres some limitations with .key
+# Use PRNGKey since theres some limitations with .key
 root_key = jax.random.PRNGKey(config["experiment"]["root_seed"])
 
 algo = PPO.create(**config["algorithm"])
@@ -36,7 +36,11 @@ print(flattened_params.shape)
 reconstructed_params = restore_fn(flattened_params)
 
 
-def make_act(ppo: PPO, ts: flax.training.train_state.TrainState, actor_params: flax.core.FrozenDict):
+def make_act(
+    ppo: PPO,
+    ts: flax.training.train_state.TrainState,
+    actor_params: flax.core.FrozenDict,
+):
     @jax.jit
     def act(obs, rng):
         if getattr(ppo, "normalize_observations", False):
@@ -49,9 +53,9 @@ def make_act(ppo: PPO, ts: flax.training.train_state.TrainState, actor_params: f
     return act
 
 
-#reconstructed_train_state = train_state.replace(actor_ts=train_state.actor_ts.replace(params=reconstructed_params))
-#restored_algo = PPO.create(**config["algorithm"])
-#jit_policy = jax.jit(restored_algo.make_act(reconstructed_train_state))
+# reconstructed_train_state = train_state.replace(actor_ts=train_state.actor_ts.replace(params=reconstructed_params))
+# restored_algo = PPO.create(**config["algorithm"])
+# jit_policy = jax.jit(restored_algo.make_act(reconstructed_train_state))
 
 jit_policy = make_act(algo, train_state, reconstructed_params)
 

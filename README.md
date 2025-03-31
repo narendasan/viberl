@@ -64,7 +64,7 @@ _LOGGER.info("Training...")
 train_states, results = vmap_train(agent_keys)
 print(results)
 
-# Seperate the vectorized training state into individual training states for each agetn
+# Separate the vectorized training state into individual training states for each agetn
 agent_ts = tree_unstack(train_states)
 
 # Visualize the policy for agent 0

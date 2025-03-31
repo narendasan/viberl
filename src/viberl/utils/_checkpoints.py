@@ -1,13 +1,12 @@
 import copy
-from typing import Dict, Any, Tuple
 import logging
 import os
 from pathlib import Path
-from typing import Optional
-import tomli_w
+from typing import Any, Dict, Optional, Tuple
 
 import jax
 import orbax.checkpoint as ocp
+import tomli_w
 from flax import struct
 from rejax.algos import Algorithm
 
@@ -16,11 +15,12 @@ from viberl.utils.types import EvalCallback, PolicyEvalResult
 
 _LOGGER = logging.getLogger(__name__)
 
-def generate_checkpointer_options(max_to_keep: int=50) -> ocp.checkpoint_manager.CheckpointManagerOptions:
+
+def generate_checkpointer_options(
+    max_to_keep: int = 50,
+) -> ocp.checkpoint_manager.CheckpointManagerOptions:
     return ocp.checkpoint_manager.CheckpointManagerOptions(
-        best_fn = lambda x: x["mean_returns"],
-        best_mode = "max",
-        max_to_keep=max_to_keep
+        best_fn=lambda x: x["mean_returns"], best_mode="max", max_to_keep=max_to_keep
     )
 
 
@@ -28,10 +28,11 @@ def load_ckpt(
     algo: Algorithm,
     ckpt_dir: str,
     experiment_name: str,
-    key: Optional[jax.Array]=None,
-    run_name: Optional[str]=None,
-    step: str | int="best",
-    rng: Optional[jax.Array] = None) -> struct.PyTreeNode:
+    key: Optional[jax.Array] = None,
+    run_name: Optional[str] = None,
+    step: str | int = "best",
+    rng: Optional[jax.Array] = None,
+) -> struct.PyTreeNode:
     """Load a model checkpoint from disk.
 
     Args:
@@ -68,24 +69,39 @@ def load_ckpt(
     else:
         ckpt_dir_path = Path(ckpt_dir)
 
-    with jax.default_device(jax.devices('gpu')[0]):
-        with ocp.CheckpointManager(ckpt_dir_path / experiment_name / phrase_hash, options=options) as ocp_checkpointer:
+    with jax.default_device(jax.devices("gpu")[0]):
+        with ocp.CheckpointManager(
+            ckpt_dir_path / experiment_name / phrase_hash, options=options
+        ) as ocp_checkpointer:
             if step == "best":
-                train_state = ocp_checkpointer.restore(ocp_checkpointer.best_step(), args=ocp.args.StandardRestore(ts))
+                train_state = ocp_checkpointer.restore(
+                    ocp_checkpointer.best_step(), args=ocp.args.StandardRestore(ts)
+                )
             elif step == "latest":
-                train_state = ocp_checkpointer.restore(ocp_checkpointer.latest_step(), args=ocp.args.StandardRestore(ts))
+                train_state = ocp_checkpointer.restore(
+                    ocp_checkpointer.latest_step(), args=ocp.args.StandardRestore(ts)
+                )
             elif isinstance(step, int):
-                train_state = ocp_checkpointer.restore(step, args=ocp.args.StandardRestore(ts))
+                train_state = ocp_checkpointer.restore(
+                    step, args=ocp.args.StandardRestore(ts)
+                )
             elif isinstance(step, str) and step.isdigit():
-                train_state = ocp_checkpointer.restore(int(step), args=ocp.args.StandardRestore(ts))
+                train_state = ocp_checkpointer.restore(
+                    int(step), args=ocp.args.StandardRestore(ts)
+                )
             else:
-                raise ValueError(f"Invalid step: {step}, must be 'best', 'latest', an integer, or a string representing an integer")
+                raise ValueError(
+                    f"Invalid step: {step}, must be 'best', 'latest', an integer, or a string representing an integer"
+                )
 
         _LOGGER.info(f"Loaded checkpoint {step} for {phrase_hash}: {train_state}")
 
     return train_state
 
-def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep: int=50) -> EvalCallback:
+
+def create_checkpointer(
+    ckpt_dir: str | Path, exp_name: str | Path, max_to_keep: int = 50
+) -> EvalCallback:
     """Create a callback for saving model checkpoints.
 
     This function creates a checkpointer callback that saves model checkpoints and evaluation
@@ -110,8 +126,19 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep:
     exp_path = ckpt_dir_prefix / exp_prefix
     exp_path.mkdir(parents=True, exist_ok=True)
 
-    def checkpointer(algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
-        def create_checkpoint(current_step: int, t: struct.PyTreeNode, e: PolicyEvalResult, id: jax.Array, total_timesteps: int) -> None:
+    def checkpointer(
+        algo: Algorithm,
+        train_state: struct.PyTreeNode,
+        key: jax.Array,
+        eval_results: PolicyEvalResult,
+    ) -> Tuple:
+        def create_checkpoint(
+            current_step: int,
+            t: struct.PyTreeNode,
+            e: PolicyEvalResult,
+            id: jax.Array,
+            total_timesteps: int,
+        ) -> None:
             # TODO: Move this into rejax
             options = generate_checkpointer_options(max_to_keep=max_to_keep)
             with ocp.CheckpointManager(
@@ -123,8 +150,8 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep:
                     args=ocp.args.StandardSave(t),
                     metrics={
                         "mean_returns": e.returns.mean().item(),
-                        "mean_lengths": e.lengths.mean().item()
-                    }
+                        "mean_lengths": e.lengths.mean().item(),
+                    },
                 )
             return
 
@@ -139,7 +166,9 @@ def create_checkpointer(ckpt_dir: str | Path, exp_name: str | Path, max_to_keep:
         )
 
         return ()
+
     return checkpointer
+
 
 def create_checkpointer_from_config(config: Dict[str, Any]) -> EvalCallback:
     """Create a callback for saving model checkpoints from configuration.
@@ -155,7 +184,11 @@ def create_checkpointer_from_config(config: Dict[str, Any]) -> EvalCallback:
     Returns:
         EvalCallback: Callback function for saving checkpoints during evaluation
     """
-    callback = create_checkpointer(ckpt_dir=config["experiment"]["ckpt_dir"], exp_name=config["experiment"]["experiment_name"], max_to_keep=config["experiment"]["max_ckpt_to_keep"])
+    callback = create_checkpointer(
+        ckpt_dir=config["experiment"]["ckpt_dir"],
+        exp_name=config["experiment"]["experiment_name"],
+        max_to_keep=config["experiment"]["max_ckpt_to_keep"],
+    )
 
     ckpt_dir_prefix = Path(config["experiment"]["ckpt_dir"])
     exp_prefix = Path(config["experiment"]["experiment_name"])

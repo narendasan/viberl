@@ -32,8 +32,9 @@ train_state = load_ckpt(
     config["experiment"]["ckpt_dir"],
     "test_experiment1-20250222200407-seed42-steps10000000-lr0.0003-test",
     run_name="serene_rhythm_transforms_pessimistically",
-    tag="best",
-    rng=root_key)
+    step="best",
+    rng=root_key,
+)
 inference_fn = algo0.make_act(train_state)
 jit_inference_fn = jax.jit(inference_fn)
 
@@ -48,5 +49,9 @@ for _ in range(10000):
     state = jit_env_step(state, act)
 
 os.makedirs(f"{os.getcwd()}/{config['experiment']['results_dir']}", exist_ok=True)
-html.save(f"{os.getcwd()}/{config['experiment']['results_dir']}/{config['experiment']['experiment_name']}.html", env.sys.tree_replace({'opt.timestep': env.dt}), rollout)
+html.save(
+    f"{os.getcwd()}/{config['experiment']['results_dir']}/{config['experiment']['experiment_name']}.html",
+    env.sys.tree_replace({"opt.timestep": env.dt}),
+    rollout,
+)
 _LOGGER.info(f"Saved: {reward}")

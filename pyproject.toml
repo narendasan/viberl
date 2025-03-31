@@ -23,10 +23,11 @@ wandb = ["wandb>=0.19.6"]
 mlflow = ["mlflow>=2.20.2"]
 
 [dependency-groups]
-dev = ["isort>=6.0.0", "ruff>=0.9.5", "marimo>=0.11.5"]
+dev = ["isort>=6.0.0", "ruff>=0.9.5", "marimo>=0.11.5", "pre-commit>=2.20.0"]
 
 [tool.uv]
 package = true
+default-groups = ["dev"]
 
 [tool.uv.sources]
 rejax = {path = "../rejax", editable = true}
@@ -90,7 +91,7 @@ lint.select = [
     # Not included in flake8
     "PERF",
     "PLE",
-    "TRY203",
+    "TRY302",
 ]
 
 # Allow unused variables when underscore-prefixed.

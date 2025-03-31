@@ -6,16 +6,17 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
-    import marimo as mo
     import logging
     import os
+    import time
 
     import jax
+    import marimo as mo
     from brax import envs
     from brax.io import html
     from rejax import PPO
-    import time
 
+    from viberl.env import render_gymnax
     from viberl.utils import (
         argparser,
         build_eval_callback,
@@ -26,7 +27,7 @@ def _():
         load_ckpt,
         setup_logger,
     )
-    from viberl.env import render_gymnax
+
     return (
         PPO,
         argparser,
@@ -51,36 +52,34 @@ def _():
 @app.cell
 def _(time):
     config = {
-        'experiment': {
-            'root_seed': 42,
-            'num_agent_seeds': 16,
-            'ckpt_dir': 'ckpts',
-            'tags': ['test'],
-            'algorithm': 'ppo',
-            'max_ckpt_to_keep': 5,
-            'results_dir': 'results',
-            'log_dir': 'logs',
-            'experiment_name': f"gymnax_experiment1-{time.time()}-seed42-steps1000000000-lr0.0003-test"
+        "experiment": {
+            "root_seed": 42,
+            "num_agent_seeds": 16,
+            "ckpt_dir": "ckpts",
+            "tags": ["test"],
+            "algorithm": "ppo",
+            "max_ckpt_to_keep": 5,
+            "results_dir": "results",
+            "log_dir": "logs",
+            "experiment_name": f"gymnax_experiment1-{time.time()}-seed42-steps1000000000-lr0.0003-test",
         },
-        'algorithm': {
-            'env': 'gymnax/Breakout-MinAtar',
-            'total_timesteps': 10000000,
-            'eval_freq': 100000,
-            'num_envs': 256,
-            'num_steps': 128,
-            'num_epochs': 16,
-            'num_minibatches': 16,
-            'learning_rate': 0.0003,
-            'max_grad_norm': 10,
-            'gamma': 0.99,
-            'gae_lambda': 0.95,
-            'clip_eps': 0.2,
-            'vf_coef': 0.5,
-            'ent_coef': 0.01,
-            'agent_kwargs': {
-                'activation': 'relu'
-            }
-        }
+        "algorithm": {
+            "env": "gymnax/Breakout-MinAtar",
+            "total_timesteps": 10000000,
+            "eval_freq": 100000,
+            "num_envs": 256,
+            "num_steps": 128,
+            "num_epochs": 16,
+            "num_minibatches": 16,
+            "learning_rate": 0.0003,
+            "max_grad_norm": 10,
+            "gamma": 0.99,
+            "gae_lambda": 0.95,
+            "clip_eps": 0.2,
+            "vf_coef": 0.5,
+            "ent_coef": 0.01,
+            "agent_kwargs": {"activation": "relu"},
+        },
     }
     return (config,)
 
@@ -94,7 +93,9 @@ def _(jax):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""JAX handles reproducablity through the key system. Starting from a root key (can be thought of as a seed) keys can be split to control PRNG across a vector of agents. Here we create $N$ splits of the root key, one for each agent we will train Under the hood, each PPO instance will also split their key $M$ times for each of the envs it will train across""")
+    mo.md(
+        r"""JAX handles reproducablity through the key system. Starting from a root key (can be thought of as a seed) keys can be split to control PRNG across a vector of agents. Here we create $N$ splits of the root key, one for each agent we will train Under the hood, each PPO instance will also split their key $M$ times for each of the envs it will train across"""
+    )
     return
 
 
@@ -107,7 +108,9 @@ def _(config, jax):
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md(r"""Here we create a vector of $N$ agents that we will train seeded with their own key derived from the root key""")
+    mo.md(
+        r"""Here we create a vector of $N$ agents that we will train seeded with their own key derived from the root key"""
+    )
     return
 
 
@@ -137,17 +140,24 @@ def _(
     create_eval_logger,
     create_mlflow_logger,
 ):
-    algo_w_callback = algo.replace(eval_callback=build_eval_callback(algo, [
-        create_eval_logger(),
-        create_mlflow_logger(config),
-        create_checkpointer_from_config(config)
-    ]))
+    algo_w_callback = algo.replace(
+        eval_callback=build_eval_callback(
+            algo,
+            [
+                create_eval_logger(),
+                create_mlflow_logger(config),
+                create_checkpointer_from_config(config),
+            ],
+        )
+    )
     return (algo_w_callback,)
 
 
 @app.cell(hide_code=True)
 def _(mo):
-    mo.md("""We then can vectorize across $N \times M$ instances of agents and envs and train these in parallel""")
+    mo.md(
+        """We then can vectorize across $N \times M$ instances of agents and envs and train these in parallel"""
+    )
     return
 
 

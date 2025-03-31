@@ -8,9 +8,12 @@ from viberl.utils._eval_callbacks import (
     build_eval_callback,
     create_eval_logger,
 )
-from viberl.utils._exp_manager import argparser, argparser_for_eval, generate_experiment_config
+from viberl.utils._exp_manager import (
+    argparser,
+    argparser_for_eval,
+    generate_experiment_config,
+)
 from viberl.utils._logger import setup_logger
-
 from viberl.utils._pytrees import tree_stack, tree_unstack
 
 __all__ = [
@@ -25,22 +28,24 @@ __all__ = [
     "load_ckpt",
     "setup_logger",
     "tree_stack",
-    "tree_unstack"
+    "tree_unstack",
 ]
 
 
 import importlib
 import warnings
 
-if importlib.util.find_spec("wandb"):
+if importlib.util.find_spec("wandb"):  # type: ignore[attr-defined]
     from viberl.utils._wandb_callbacks import create_wandb_logger
+
     __all__ += ["create_wandb_logger"]
 else:
     warnings.warn("Install wandb to use the wandb logging system")
 
 
-if importlib.util.find_spec("mlflow"):
+if importlib.util.find_spec("mlflow"):  # type: ignore[attr-defined]
     from viberl.utils._mlflow_callbacks import create_mlflow_logger
+
     __all__ += ["create_mlflow_logger"]
 else:
     warnings.warn("Install mlflow to use the mlflow logging system")

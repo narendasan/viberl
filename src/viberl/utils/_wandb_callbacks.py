@@ -27,32 +27,41 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """
     config = copy.deepcopy(config)
 
-    def wandb_logger(a: Algorithm, train_state: struct.PyTreeNode, key: jax.Array, eval_results: PolicyEvalResult) -> Tuple:
-        def log(id: jax.Array, step: int, data: Dict[str, float]) -> None:
-            wandb.init(
+    def wandb_logger(
+        a: Algorithm,
+        train_state: struct.PyTreeNode,
+        key: jax.Array,
+        eval_results: PolicyEvalResult,
+    ) -> Tuple:
+        def log(id: jax.Array, step: jax.Array, data: Dict[str, float]) -> None:
+            wandb.init(  # type: ignore
                 project="rl-sandbox",
                 group=config["experiment"]["experiment_name"],
                 tags=config["experiment"]["tags"],
                 config=config,
                 resume="allow",
                 reinit=True,
-                id=f"{generate_phrase_hash(id[1])}-{config['experiment']['experiment_name']}"
+                id=f"{generate_phrase_hash(id[1])}-{config['experiment']['experiment_name']}",
             )
             # io_callback returns np.array, which wandb does not like.
             # In jax 0.4.27, this becomes a jax array, should check when upgrading...
             step = step.item()
-            wandb.log(data, step=step)
-            wandb.finish()
+            wandb.log(data, step=step)  # type: ignore
+            wandb.finish()  # type: ignore
 
         jax.experimental.io_callback(
             log,
             (),  # result_shape_dtypes (wandb.log returns None)
             copy.deepcopy(train_state.seed),
             train_state.global_step,
-            {"mean_episode_length": eval_results.lengths.mean(), "mean_return": eval_results.returns.mean()},
+            {
+                "mean_episode_length": eval_results.lengths.mean(),
+                "mean_return": eval_results.returns.mean(),
+            },
         )
 
         # Since we log to wandb, we don't want to return anything that is collected
         # throughout training
         return ()
+
     return wandb_logger

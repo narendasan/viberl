@@ -16,12 +16,11 @@ def _generate_experiment_name(config: Dict[str, Any]) -> str:
     lr = config["algorithm"]["learning_rate"]
     prefix += f"-lr{lr}"
 
-    tags = config["experiment"]["tags"]
-    if tags is not None or len(tags) != 0:
+    if "tags" in config["experiment"]:
+        tags = config["experiment"]["tags"]
         tag_slugs = ""
         for t in tags:
             tag_slugs += f"-{t}"
-
         return f"{prefix}{tag_slugs}"
     else:
         return prefix
@@ -33,10 +32,12 @@ def generate_experiment_config(path: Path) -> Dict[str, Any]:
     config["experiment"]["experiment_name"] = _generate_experiment_name(config)
     return config
 
+
 def argparser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("config_file")
     return parser
+
 
 def argparser_for_eval() -> argparse.ArgumentParser:
     parser = argparser()
