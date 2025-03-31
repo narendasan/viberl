@@ -20,7 +20,10 @@ def generate_checkpointer_options(
     max_to_keep: int = 50,
 ) -> ocp.checkpoint_manager.CheckpointManagerOptions:
     return ocp.checkpoint_manager.CheckpointManagerOptions(
-        best_fn=lambda x: x["mean_returns"], best_mode="max", max_to_keep=max_to_keep
+        best_fn=lambda x: x["mean_returns"],
+        best_mode="max",
+        max_to_keep=max_to_keep,
+        enable_async_checkpointing=True,
     )
 
 
