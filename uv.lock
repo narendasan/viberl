@@ -1803,15 +1803,6 @@ wheels = [
 ]
 
 [[package]]
-name = "orbax"
-version = "0.1.9"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "orbax-checkpoint" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c7/78/0e144f12703c95d4495e9abc390c2f548ee9f24d2e487137108a921b1d81/orbax-0.1.9.tar.gz", hash = "sha256:42dd487ceef9fbf027f4720f3d041686af75120466a528a8a8141226bc197218", size = 1649 }
-
-[[package]]
 name = "orbax-checkpoint"
 version = "0.11.10"
 source = { registry = "https://pypi.org/simple" }
@@ -2902,7 +2893,7 @@ dependencies = [
     { name = "jax", extra = ["cuda12"], marker = "sys_platform == 'linux'" },
     { name = "jumanji" },
     { name = "mnemonic" },
-    { name = "orbax" },
+    { name = "orbax-checkpoint" },
     { name = "rejax" },
     { name = "ribs" },
     { name = "tomli-w" },
@@ -2932,7 +2923,7 @@ requires-dist = [
     { name = "jumanji", specifier = ">=1.1.0" },
     { name = "mlflow", marker = "extra == 'mlflow'", specifier = ">=2.20.2" },
     { name = "mnemonic", specifier = ">=0.21" },
-    { name = "orbax", specifier = ">=0.1.9" },
+    { name = "orbax-checkpoint", specifier = ">=0.11.10" },
     { name = "rejax", editable = "../rejax" },
     { name = "ribs", specifier = ">=0.7.1" },
     { name = "tomli-w", specifier = ">=1.2.0" },

@@ -8,16 +8,16 @@ algorithm = "ppo"
 max_ckpt_to_keep = 5
 results_dir = "results"
 log_dir = "logs"
-log_level = "DEBUG"
+log_level = "INFO"
 
 [algorithm]
 env = "gymnax/Breakout-MinAtar"
 total_timesteps = 1_000_000
 eval_freq = 100_000
-num_envs = 256
-num_steps = 128
-num_epochs = 16
-num_minibatches = 16
+num_envs = 200
+num_steps = 100
+num_epochs = 15
+num_minibatches = 25
 learning_rate = 0.0003
 max_grad_norm = 10
 gamma = 0.99
