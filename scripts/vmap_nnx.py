@@ -124,7 +124,7 @@ print("Both outputs match!")
 
 # How to squash model slices into a vectorized model
 state_list = [nnx.state(model) for model in model_slices]
-stacked_state = jax.tree_map(lambda x: jnp.stack(x), state_list)
+stacked_state = jax.tree_map(lambda *x: jnp.stack(x), *state_list)
 print(stacked_state)
 
 
