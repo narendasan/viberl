@@ -286,3 +286,8 @@ def calculate_discounted_sum(
     )
 
     return discounted_sum
+
+
+class VPPOState:
+    def __init__(self, cfg):
+        agent =

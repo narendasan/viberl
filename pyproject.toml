@@ -15,6 +15,7 @@ dependencies = [
     "rejax>=0.1.1",
     "tomli-w>=1.2.0",
     "ribs>=0.7.1",
+    "distrax>=0.1.5",
 ]
 license = "NCSA"
 

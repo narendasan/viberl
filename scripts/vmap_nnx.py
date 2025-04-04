@@ -6,9 +6,6 @@ from flax import nnx
 import jax
 import jax.numpy as jnp
 
-import optax
-from rejax.compat import create
-from viberl.utils import tree_unstack
 import viberl
 
 
@@ -100,7 +97,7 @@ print("outputs_vec:", outputs_vec)
 print("outputs_vec.shape:", outputs_vec.shape)
 
 # Run the vectorized model iteratively
-model_slices = viberl.utils._pytrees.unstack_modules(
+model_slices = viberl.utils.unstack_modules(
     MLP,
     nnx.state(models),
     num_slices=10,

@@ -1,4 +1,5 @@
 version = 1
+revision = 1
 requires-python = ">=3.11"
 resolution-markers = [
     "python_full_version >= '3.13' and sys_platform == 'linux'",
@@ -2313,6 +2314,7 @@ requires-dist = [
     { name = "optax", specifier = ">=0.2.3" },
     { name = "pyyaml", specifier = ">=6.0.2" },
 ]
+provides-extras = ["compat"]
 
 [[package]]
 name = "requests"
@@ -2888,6 +2890,7 @@ name = "viberl"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "distrax" },
     { name = "evosax" },
     { name = "jax", marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
     { name = "jax", extra = ["cuda12"], marker = "sys_platform == 'linux'" },
@@ -2917,6 +2920,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "distrax", specifier = ">=0.1.5" },
     { name = "evosax", specifier = ">=0.1.6" },
     { name = "jax", marker = "sys_platform == 'darwin'", specifier = ">=0.5.0" },
     { name = "jax", extras = ["cuda12"], marker = "sys_platform == 'linux'", specifier = ">=0.5.0" },
@@ -2929,6 +2933,7 @@ requires-dist = [
     { name = "tomli-w", specifier = ">=1.2.0" },
     { name = "wandb", marker = "extra == 'wandb'", specifier = ">=0.19.6" },
 ]
+provides-extras = ["wandb", "mlflow"]
 
 [package.metadata.requires-dev]
 dev = [
