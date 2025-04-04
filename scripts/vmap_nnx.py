@@ -9,6 +9,7 @@ import jax.numpy as jnp
 import optax
 from rejax.compat import create
 from viberl.utils import tree_unstack
+import viberl
 
 
 # Arbitrary model definition, 2 linear layers. We control the initializtion of weights and biases so its easier to see where results come from
@@ -99,18 +100,16 @@ print("outputs_vec:", outputs_vec)
 print("outputs_vec.shape:", outputs_vec.shape)
 
 # Run the vectorized model iteratively
-# Determine the number of models (axis size)
-# We know it's N_MODELS, but dynamically:
-vectorized_state = nnx.state(models)
-print(vectorized_state)
+model_slices = viberl.utils._pytrees.unstack_modules(
+    MLP,
+    nnx.state(models),
+    num_slices=10,
+    module_init_args=[(10, 20, 30)] * 10,
+    module_init_kwargs=[{"const": -1, "rngs": nnx.Rngs(i)} for i in range(10)]
+)
 outputs = []
-model_slices = []
 for i in range(10):
-    model_state_slice = jax.tree_map(lambda x: x[i], vectorized_state)
-    model_instance = MLP(10, 20, 30, const=-1, rngs=nnx.Rngs(i))
-    nnx.update(model_instance, model_state_slice)
-    model_slices.append(model_instance)
-    output = model_instance(input) # Apply each model *once*
+    output = model_slices[i](input) # Apply each model *once*
     outputs.append(output)
     print(f"Output from model {i+1}: {output}")
 
@@ -123,23 +122,21 @@ print("Both outputs match!")
 
 
 # How to squash model slices into a vectorized model
-state_list = [nnx.state(model) for model in model_slices]
-stacked_state = jax.tree_map(lambda *x: jnp.stack(x), *state_list)
+stacked_state = viberl.utils.tree_stack([nnx.state(model) for model in model_slices])
 print(stacked_state)
 
-
-empty_vmap_model = create_models(jnp.full_like(consts, -1))
-nnx.update(empty_vmap_model, stacked_state)
+new_stacked_model = create_models(jnp.full_like(consts, -1))
+nnx.update(new_stacked_model, stacked_state)
 
 # Create 10 identical inputs
 inputs = jnp.stack([jnp.ones((10,))] * 10)
 print("inputs.shape:", inputs.shape)
 # Run all models on all inputs
-outputs_vec = run_models(models, inputs)
-print("outputs_vec2:", outputs_vec)
-print("outputs_vec2.shape:", outputs_vec.shape)
+outputs_vec2 = run_models(new_stacked_model, inputs)
+print("outputs_vec2:", outputs_vec2)
+print("outputs_vec2.shape:", outputs_vec2.shape)
 
 # Assert that the vectorized and iterative outputs match
 print("Checking if vectorized and iterative outputs match...")
-assert jnp.allclose(outputs_vec, outputs_iter), "Vectorized and iterative outputs should be identical"
+assert jnp.allclose(outputs_vec2, outputs_iter), "Vectorized and iterative outputs should be identical"
 print("Both outputs match!")

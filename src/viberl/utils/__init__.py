@@ -14,7 +14,7 @@ from viberl.utils._exp_manager import (
     generate_experiment_config,
 )
 from viberl.utils._logger import setup_logger
-from viberl.utils._pytrees import tree_stack, tree_unstack
+from viberl.utils._pytrees import tree_stack, tree_unstack, unstack_modules
 
 __all__ = [
     "build_eval_callback",
@@ -29,6 +29,7 @@ __all__ = [
     "setup_logger",
     "tree_stack",
     "tree_unstack",
+    "unstack_modules"
 ]
 
 
