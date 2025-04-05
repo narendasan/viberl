@@ -2,6 +2,7 @@ from typing import Tuple, Sequence, Callable, Optional, List
 import itertools
 
 from distrax._src.utils.transformations import lu
+from flax.nnx.statelib import K
 from gymnax.environments import EnvState
 import jax
 import jax.numpy as jnp
@@ -44,27 +45,27 @@ class QDCritic(object):
                  activation_fn: Callable = nnx.tanh,
                  num_critics: Optional[int] = None,
                  critic_list: Optional[List[nnx.Module]] = None,
-                 rngs:nnx.Rngs=nnx.Rngs(0)):
+                 key: jax.random.key):
         super().__init__()
 
         assert (num_critics is not None) ^ (critic_list is not None), "Exactly one of num_critics or critic_list must be provided"
 
         if critic_list is None:
             assert num_critics is not None, "num_critics must be provided since critic_list is None"
-            ensemble_rngs = nnx.split_rngs(rngs, splits=num_critics)
-            critic_state_list = [nnx.state(CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=r)) for r in ensemble_rngs]
+            key_splits = jax.random.split(key, num_critics)
+            critic_state_list = [nnx.state(CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=nnx.Rngs(k))) for k in key_splits]
         else:
             num_critics = len(critic_list)
-            ensemble_rngs = nnx.split_rngs(rngs, splits=num_critics)
+            key_splits = jax.random.split(key, num_critics)
             critic_state_list = [nnx.state(c) for c in critic_list]
 
         stacked_state = tree_stack(critic_state_list)
 
         @nnx.vmap(in_axes=0, out_axes=0)
-        def create_vmap_critic(rngs):
-            return CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=rngs)
+        def create_vmap_critic(key: jax.random.key):
+            return CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=nnx.Rngs(key))
 
-        self.critic_ = create_vmap_critic(ensemble_rngs)
+        self.critic_ = create_vmap_critic(key_splits)
 
     def get_value_at(self, obs: jax.Array, idx: int):
         val = self.critic_(obs)
@@ -75,5 +76,13 @@ class QDCritic(object):
         return val
 
 if __name__ == "__main__":
-    actor = CriticMLP((4,), hidden_dims=[256, 256])
-    nnx.display(actor)
+    critic = CriticMLP((4,), hidden_dims=[256, 256])
+    nnx.display(critic)
+
+    key = jax.random.PRNGKey(0)
+    k1, k2 = jax.random.split(key)
+    qd_critic_1 = QDCritic((4,), hidden_dims=[256, 256], num_critics=2, key=k1)
+    nnx.display(qd_critic_1.critic_)
+
+    qd_critic_2 = QDCritic((4,), hidden_dims=[256, 256], critic_list=[critic, critic], key=k2)
+    nnx.display(qd_critic_2.critic_)
