@@ -1,11 +1,14 @@
 from typing import Tuple, Sequence, Callable, Optional, List
 import itertools
 
+from distrax._src.utils.transformations import lu
+from gymnax.environments import EnvState
 import jax
 import jax.numpy as jnp
 import distrax
 from flax import nnx
-from numpy.lib.index_tricks import r_
+from numpy import int_
+from viberl.utils import tree_stack
 
 class CriticMLP(nnx.Module):
     def __init__(self,
@@ -33,7 +36,7 @@ class CriticMLP(nnx.Module):
     def __call__(self, x):
         return self.critic_(x)
 
-class QDCriticMLP(nnx.Module):
+class QDCritic(object):
     def __init__(self,
                  obs_shape: Tuple[int],
                  *,
@@ -46,12 +49,30 @@ class QDCriticMLP(nnx.Module):
 
         assert (num_critics is not None) ^ (critic_list is not None), "Exactly one of num_critics or critic_list must be provided"
 
-        if num_critics is not None:
-            ensemble_rngs = nnx.split_rngs(rngs, num_critics)
-            self.critic_list = [CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=r) for r in ensemble_rngs]
+        if critic_list is None:
+            assert num_critics is not None, "num_critics must be provided since critic_list is None"
+            ensemble_rngs = nnx.split_rngs(rngs, splits=num_critics)
+            critic_state_list = [nnx.state(CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=r)) for r in ensemble_rngs]
         else:
-            self.critic_list = critic_list
+            num_critics = len(critic_list)
+            ensemble_rngs = nnx.split_rngs(rngs, splits=num_critics)
+            critic_state_list = [nnx.state(c) for c in critic_list]
 
+        stacked_state = tree_stack(critic_state_list)
+
+        @nnx.vmap(in_axes=0, out_axes=0)
+        def create_vmap_critic(rngs):
+            return CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=rngs)
+
+        self.critic_ = create_vmap_critic(ensemble_rngs)
+
+    def get_value_at(self, obs: jax.Array, idx: int):
+        val = self.critic_(obs)
+        return val[idx]
+
+    def get_all_values(self, obs: jax.Array):
+        val = self.critic_(obs)
+        return val
 
 if __name__ == "__main__":
     actor = CriticMLP((4,), hidden_dims=[256, 256])
