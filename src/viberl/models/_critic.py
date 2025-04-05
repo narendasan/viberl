@@ -66,6 +66,7 @@ class QDCritic(object):
             return CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=nnx.Rngs(key))
 
         self.critic_ = create_vmap_critic(key_splits)
+        nnx.update(self.critic_, stacked_state)
 
     def get_value_at(self, obs: jax.Array, idx: int):
         val = self.critic_(obs)
