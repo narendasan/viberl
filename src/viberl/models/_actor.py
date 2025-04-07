@@ -29,7 +29,7 @@ class ActorMLP(nnx.Module):
 
         args = [(d, {"kernel_init": k, "bias_init": b, "rngs": r}) for d, k, b, r in zip(dim_pairs, kernel_init, bias_init, rngs_init)]
 
-        self.action_mean = nnx.Sequential(list(itertools.chain.from_iterable([
+        self.action_mean = nnx.Sequential(*list(itertools.chain.from_iterable([
             [nnx.Linear(*a, **k), activation_fn] for a, k in args
         ]))) #type: ignore
 
@@ -52,3 +52,8 @@ class ActorMLP(nnx.Module):
 if __name__ == "__main__":
     actor = ActorMLP((4,), (2,), hidden_dims=[128, 128])
     nnx.display(actor)
+
+    inputs = jnp.stack([jnp.ones((4,))] * 2)
+    outputs = actor(inputs)
+
+    print(outputs)

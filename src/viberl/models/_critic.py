@@ -5,6 +5,7 @@ from distrax._src.utils.transformations import lu
 from flax.nnx.statelib import K
 from gymnax.environments import EnvState
 import jax
+from jax._src import random
 import jax.numpy as jnp
 import distrax
 from flax import nnx
@@ -31,7 +32,7 @@ class CriticMLP(nnx.Module):
 
         args = [(d, {"kernel_init": k, "bias_init": b, "rngs": r}) for d, k, b, r in zip(dim_pairs, kernel_init, bias_init, rngs_init)]
 
-        self.critic_ = nnx.Sequential(list(itertools.chain.from_iterable([
+        self.critic_ = nnx.Sequential(*list(itertools.chain.from_iterable([
             [nnx.Linear(*a, **k), activation_fn] for a, k in args
         ]))) #type: ignore
 
@@ -51,6 +52,7 @@ class QDCritic(object):
 
         assert (num_critics is not None) ^ (critic_list is not None), "Exactly one of num_critics or critic_list must be provided"
 
+        # Need to store so that when unpacking, the networks can be reconstructed
         self.obs_shape = obs_shape
         self.hidden_dims = hidden_dims
         self.activation_fn = activation_fn
@@ -74,16 +76,21 @@ class QDCritic(object):
         def create_vmap_critic(key: jax.random.key):
             return CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=nnx.Rngs(key))
 
+        @nnx.vmap(in_axes=(0,0), out_axes=0)
+        def run_models(models, inputs):
+            return models(inputs)
+
+        self._run_models = run_models
+
         self.critic_ = create_vmap_critic(key_splits)
         nnx.update(self.critic_, stacked_state)
 
-    def get_value_at(self, obs: jax.Array, idx: int):
-        val = self.critic_(obs)
-        return val[idx]
-
     def get_all_values(self, obs: jax.Array):
-        val = self.critic_(obs)
-        return val
+        return self._run_models(self.critic_, obs)
+
+    def get_value_at(self, obs: jax.Array, idx: int):
+        val = self.get_all_values(obs)
+        return val[idx]
 
     def unpack_critics(self):
         return unstack_modules(
@@ -115,3 +122,13 @@ if __name__ == "__main__":
 
     qd_critic_3 = QDCritic((4,), hidden_dims=[256, 256], critic_list=critic_list, key=k2)
     nnx.display(qd_critic_3.critic_)
+
+    inputs = jnp.stack([jnp.ones((4,))] * 2)
+
+    out1 = qd_critic_1.get_all_values(inputs)
+    out2 = qd_critic_2.get_all_values(inputs)
+    out3 = qd_critic_3.get_all_values(inputs)
+
+    print(out1, out2, out3)
+
+    assert jnp.allclose(out2, out3), "Vectorized outputs should be identical"
