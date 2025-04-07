@@ -10,6 +10,7 @@ import distrax
 from flax import nnx
 from numpy import int_
 from viberl.utils import tree_stack
+from viberl.utils._pytrees import unstack_modules
 
 class CriticMLP(nnx.Module):
     def __init__(self,
@@ -50,14 +51,22 @@ class QDCritic(object):
 
         assert (num_critics is not None) ^ (critic_list is not None), "Exactly one of num_critics or critic_list must be provided"
 
+        self.obs_shape = obs_shape
+        self.hidden_dims = hidden_dims
+        self.activation_fn = activation_fn
+
+
         if critic_list is None:
             assert num_critics is not None, "num_critics must be provided since critic_list is None"
             key_splits = jax.random.split(key, num_critics)
-            critic_state_list = [nnx.state(CriticMLP(obs_shape, hidden_dims=hidden_dims, activation_fn=activation_fn, rngs=nnx.Rngs(k))) for k in key_splits]
+            critic_state_list = [nnx.state(CriticMLP(obs_shape, hidden_dims=self.hidden_dims, activation_fn=self.activation_fn, rngs=nnx.Rngs(k))) for k in key_splits]
         else:
             num_critics = len(critic_list)
             key_splits = jax.random.split(key, num_critics)
             critic_state_list = [nnx.state(c) for c in critic_list]
+
+        self.num_critics = num_critics
+        self.key_splits = key_splits
 
         stacked_state = tree_stack(critic_state_list)
 
@@ -76,6 +85,19 @@ class QDCritic(object):
         val = self.critic_(obs)
         return val
 
+    def unpack_critics(self):
+        return unstack_modules(
+            CriticMLP,
+            nnx.state(self.critic_),
+            num_slices=self.num_critics,
+            module_init_args=[(self.obs_shape,) for _ in range(self.num_critics)],
+            module_init_kwargs=[{
+                "hidden_dims": self.hidden_dims,
+                "activation_fn": self.activation_fn,
+                "rngs": nnx.Rngs(k) # Does this change the seed?
+            } for k in self.key_splits]
+        )
+
 if __name__ == "__main__":
     critic = CriticMLP((4,), hidden_dims=[256, 256])
     nnx.display(critic)
@@ -87,3 +109,9 @@ if __name__ == "__main__":
 
     qd_critic_2 = QDCritic((4,), hidden_dims=[256, 256], critic_list=[critic, critic], key=k2)
     nnx.display(qd_critic_2.critic_)
+
+    critic_list = qd_critic_2.unpack_critics()
+    [nnx.display(critic) for critic in critic_list]
+
+    qd_critic_3 = QDCritic((4,), hidden_dims=[256, 256], critic_list=critic_list, key=k2)
+    nnx.display(qd_critic_3.critic_)
