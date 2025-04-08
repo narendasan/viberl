@@ -1,15 +1,11 @@
 from typing import Tuple, Sequence, Callable, Optional, List
 import itertools
 
-from distrax._src.utils.transformations import lu
-from flax.nnx.statelib import K
-from gymnax.environments import EnvState
 import jax
-from jax._src import random
 import jax.numpy as jnp
 import distrax
 from flax import nnx
-from numpy import int_
+
 from viberl.utils import tree_stack
 from viberl.utils._pytrees import unstack_modules
 
