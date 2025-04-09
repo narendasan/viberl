@@ -24,6 +24,14 @@ class ActorMLP(nnx.Module):
     ):
         super().__init__()
 
+
+        self.obs_shape = obs_shape
+        self.action_shape = action_shape
+        self.hidden_dims = hidden_dims
+        self.activation_fn = activation_fn
+        self.normalize_obs = normalize_obs
+        self.normalize_returns = normalize_returns
+
         dims = [jnp.array(obs_shape).prod().item()] + list(hidden_dims) + [jnp.array(action_shape).prod().item()]
         dim_pairs = [(dims[i], dims[i+1]) for i in range(len(dims)-1)]
 
@@ -72,23 +80,17 @@ class VectorizedActor(object):
     def __init__(
         self,
         actor: ActorMLP,
-        obs_shape: Tuple[int],
-        action_shape: Tuple[int],
         num_replicas: int,
         *,
-        hidden_dims: Sequence[int] = [128, 128],
-        activation_fn: Callable = nnx.tanh,
-        normalize_obs: bool=False,
-        normalize_returns: bool=False,
         key: jax.random.key
     ):
 
-        self.obs_shape = obs_shape
-        self.action_shape = action_shape
-        self.hidden_dims = hidden_dims
-        self.activation_fn = activation_fn
-        self.normalize_obs = normalize_obs
-        self.normalize_returns = normalize_returns
+        self.obs_shape = actor.obs_shape
+        self.action_shape = actor.action_shape
+        self.hidden_dims = actor.hidden_dims
+        self.activation_fn = actor.activation_fn
+        self.normalize_obs = actor.normalize_obs
+        self.normalize_returns = actor.normalize_returns
         self.root_key = key
         self.num_replicas = num_replicas
 
@@ -180,7 +182,7 @@ if __name__ == "__main__":
     print(actor.get_action(input, jax.random.key(0)))
 
     key = jax.random.key(0)
-    vec_actor = VectorizedActor(actor, (1,4), (1,2), num_replicas=2, hidden_dims=[128, 128], key=key)
+    vec_actor = VectorizedActor(actor, num_replicas=2, key=key)
     nnx.display(vec_actor._actor_replicas)
 
 
@@ -195,3 +197,6 @@ if __name__ == "__main__":
     print(vec_actor.get_action(inputs, split_keys))
 
     [nnx.display(a) for a in vec_actor.unpack_actors()]
+
+    get_action = jax.jit(vec_actor.get_action)
+    print(get_action(inputs, split_keys))
