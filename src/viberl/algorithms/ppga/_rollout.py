@@ -14,7 +14,9 @@ class Rollout:
     truncated: chex.Array
     values: chex.Array
     measures: chex.Array
-    len: int
+
+    def __len__(self):
+        return self.obs.shape[0]
 
 
 def make_empty_rollout(rollout_len: int, num_envs: int, obs_shape: Tuple[int, ...], action_shape: Tuple[int, ...], num_measures: int) -> Rollout:
@@ -27,5 +29,4 @@ def make_empty_rollout(rollout_len: int, num_envs: int, obs_shape: Tuple[int, ..
         truncated=jnp.zeros((rollout_len, num_envs)),
         values=jnp.zeros((rollout_len, num_envs)),
         measures=jnp.zeros((rollout_len, num_envs, num_measures)),
-        len=rollout_len
     )

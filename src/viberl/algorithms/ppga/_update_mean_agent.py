@@ -24,20 +24,19 @@ from rejax.networks import DiscretePolicy, GaussianPolicy, VNetwork
 from viberl.models._actor import VectorizedActor, ActorMLP
 from viberl.models._critic import QDCritic, CriticMLP
 
-from viberl.algorithms.ppga._utils import normalize, pg_loss, v_loss, batch_update
+from viberl.algorithms.ppga._batch_update import batch_update
+from viberl.algorithms.ppga._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
 from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
-from viberl.algorithms.ppga._calculate_discounted_sum import calculate_discounted_sum
 
-
-
-class VPPOState:
-    def __init__(self, cfg):
-        agent =
+from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
+from viberl.algorithms.ppga._config import Config
+from viberl.algorithms.ppga._state import VPPOState
 
 
 def _calculate_returns(state: VPPOState, cfg: Config, rollouts: Rollout) -> Tuple[jax.Array, jax.Array]:
     jax.lax.stop_gradient(state)
-    next_values = state.mean_critic.get_value(rollouts.obs)
+    last_obs = rollouts.obs[-1]
+    next_values = state.mean_critic.get_value(last_obs)
 
     if cfg.normalize_returns:
         ...
@@ -56,7 +55,15 @@ def _calculate_returns(state: VPPOState, cfg: Config, rollouts: Rollout) -> Tupl
 
     return advantages, returns
 
-def _mean_agent_mb_loss(state: VPPOState, cfg: Config, rollout: Rollout, advantages: jax.Array, returns: jax.Array, *, mb_idxs: jax.Array) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+def _mean_agent_mb_loss(
+    state: VPPOState,
+    cfg: Config,
+    rollout: Rollout,
+    advantages: jax.Array,
+    returns: jax.Array,
+    mb_idxs: jax.Array
+) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+
     b_obs = rollout.obs[:, mb_idxs]
     b_actions = rollout.actions[:, mb_idxs]
     b_values = rollout.values[:, mb_idxs]
@@ -92,10 +99,18 @@ def _mean_agent_mb_loss(state: VPPOState, cfg: Config, rollout: Rollout, advanta
 
 
 @nnx.jit
-def _mean_agent_train_step(state: VPPOState, cfg: Config, rollout: Rollout, advantages: jax.Array, returns: jax.Array, *, mb_idxs: jax.Array):
+def _mean_agent_train_step(
+    state: VPPOState,
+    cfg: Config,
+    rollout: Rollout,
+    advantages: jax.Array,
+    returns: jax.Array,
+    mb_idxs: jax.Array
+) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+
     grad_fn = nnx.value_and_grad(_mean_agent_mb_loss, has_aux=True)
-    (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs=mb_idxs)
-    state.metrics.update(
+    (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs)
+    state.metrics.update( # TODO: Do we need seperate metrics?
         loss=loss,
         pg_loss=pg_loss,
         v_loss=v_loss,
@@ -105,7 +120,8 @@ def _mean_agent_train_step(state: VPPOState, cfg: Config, rollout: Rollout, adva
         clipfracs=clipfracs,
         ratio=ratio
     )
-    state.optimizer.update(grads)
+    state.actor_optimizer.update(grads)
+    state.mean_critic_optimizer.update(grads)
 
     return (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio)
 
@@ -113,7 +129,7 @@ def _mean_agent_train_step(state: VPPOState, cfg: Config, rollout: Rollout, adva
 def update_mean_agent(
     state: VPPOState,
     cfg: Config,
-    env: ,
+    env: Env,
     num_updates: int,
     rollout_len: int,
     key: jax.random.key,
@@ -174,8 +190,13 @@ def update_mean_agent(
                 truncated=_truncated,
                 values=_values,
                 measures=_measures,
-                len=rollout.len
             )
 
 
-         = batch_update(state, cfg, rollout, calculate_returns_fn=_calculate_returns, train_step_fn=_mean_agent_train_step)
+        (pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfrac, ratio) = batch_update(
+            state,
+            cfg,
+            rollout,
+            calculate_returns_fn=_calculate_returns,
+            train_step_fn=_mean_agent_train_step
+        )

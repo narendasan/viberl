@@ -25,6 +25,8 @@ from viberl.models._actor import VectorizedActor, ActorMLP
 from viberl.models._critic import QDCritic, CriticMLP
 
 from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
+from viberl.algorithms.ppga._config import Config
+from viberl.algorithms.ppga._state import VPPOState
 
 def calculate_discounted_sum(
     x: jax.Array,
@@ -60,19 +62,10 @@ def calculate_discounted_sum(
 
     return discounted_sum
 
-
-class VPPOState:
-    def __init__(self, cfg):
-        agent =
-
-
-
-
-
 def train(
     state: VPPOState,
     cfg: Config,
-    env: ,
+    env: Env,
     num_updates: int,
     rollout_len: int,
     key: jax.random.key,
