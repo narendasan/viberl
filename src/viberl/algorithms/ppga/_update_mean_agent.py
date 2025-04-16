@@ -120,7 +120,9 @@ def _mean_agent_train_step(
         clipfracs=clipfracs,
         ratio=ratio
     )
+    # Grad clipping is part of the optimizer
     state.actor_optimizer.update(grads)
+    # Grad clipping is part of the optimizer
     state.mean_critic_optimizer.update(grads)
 
     return (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio)
