@@ -69,7 +69,7 @@ def _mean_agent_mb_loss(
     b_values = rollout.values[:, mb_idxs]
     b_logprobs = rollout.logprobs[:, mb_idxs]
 
-    _, logprob, entropy = state.actors.get_action(b_obs, b_actions)
+    _, logprob, entropy = state.actors.get_action_log_probs(b_obs, actions=b_actions)
 
     values = state.mean_critic.get_value(b_obs[:, mb_idxs])
 
@@ -158,7 +158,7 @@ def update_mean_agent(
 
             _obs = rollout.obs.at[step].set(next_obs)
 
-            action, logprob, _ = state.actors.get_action(next_obs)
+            action, logprob, _ = state.actors.get_action(next_obs, keys=actor_keys)
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 

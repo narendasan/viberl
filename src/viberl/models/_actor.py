@@ -55,17 +55,28 @@ class ActorMLP(nnx.Module):
     def get_action(
         self,
         obs: jax.Array,
-        key: jax.random.PRNGKey,
-        action: Optional[jax.Array] = None
+        *,
+        key: jax.Array,
     ) -> Tuple[jax.Array, jax.Array, jax.Array]:
         action_mean = self.action_mean(obs)
         action_logstd = jnp.reshape(self.action_logstd.value, action_mean.shape)
         action_std = jnp.exp(action_logstd)
         dist = distrax.Normal(action_mean, action_std)
-        if action is None:
-            action = dist.sample(seed=key)
+        action = dist.sample(seed=key)
 
         return action, dist.log_prob(action), dist.entropy()
+
+    def get_action_log_probs(
+        self,
+        obs: jax.Array,
+        *,
+        action: Optional[jax.Array] = None
+    ) -> Tuple[jax.Array, jax.Array]:
+        action_mean = self.action_mean(obs)
+        action_logstd = jnp.reshape(self.action_logstd.value, action_mean.shape)
+        action_std = jnp.exp(action_logstd)
+        dist = distrax.Normal(action_mean, action_std)
+        return dist.log_prob(action), dist.entropy()
 
 class VectorizedActor(object):
     """
@@ -82,7 +93,7 @@ class VectorizedActor(object):
         actor: ActorMLP,
         num_replicas: int,
         *,
-        key: jax.random.key
+        key: jax.Array
     ):
 
         self.obs_shape = actor.obs_shape
@@ -98,7 +109,7 @@ class VectorizedActor(object):
         vectorized_state = tree_stack(state_stack)
 
         @nnx.vmap(in_axes=0, out_axes=0)
-        def create_actor_vmap(key: jax.random.key):
+        def create_actor_vmap(key: jax.Array):
             return ActorMLP(
                 self.obs_shape,
                 self.action_shape,
@@ -126,19 +137,30 @@ class VectorizedActor(object):
         def vec_get_action(
             replicas: ActorMLP,
             obs: jax.Array,
-            key: jax.random.key,
-            action: Optional[jax.Array] = None
+            key: jax.Array,
         ) -> Tuple[jax.Array, jax.Array, jax.Array]:
             action_mean = replicas.action_mean(obs)
             action_logstd = jnp.reshape(replicas.action_logstd.value, action_mean.shape)
             action_std = jnp.exp(action_logstd)
             dist = distrax.Normal(action_mean, action_std)
-            if action is None:
-                print(key.shape)
-                action = dist.sample(seed=key[0])
+            action = dist.sample(seed=key[0])
             return action, dist.log_prob(action), dist.entropy()
 
         self._vec_get_action = vec_get_action
+
+        @nnx.vmap(in_axes=0, out_axes=0, axis_size=self.num_replicas)
+        def vec_get_action_log_probs(
+            replicas: ActorMLP,
+            obs: jax.Array,
+            action: jax.Array
+        ) -> Tuple[jax.Array, jax.Array]:
+            action_mean = replicas.action_mean(obs)
+            action_logstd = jnp.reshape(replicas.action_logstd.value, action_mean.shape)
+            action_std = jnp.exp(action_logstd)
+            dist = distrax.Normal(action_mean, action_std)
+            return dist.log_prob(action), dist.entropy()
+
+        self._vec_get_action_log_probs = vec_get_action_log_probs
 
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self._vec_mean_action(self._actor_replicas, obs)
@@ -146,14 +168,22 @@ class VectorizedActor(object):
     def get_action(
         self,
         obs: jax.Array,
-        keys: jax.random.key,
-        action: Optional[jax.Array] = None
+        keys: Optional[jax.Array] = None,
     ) -> Tuple[jax.Array, jax.Array, jax.Array]:
         """
         These should be vectorized inputs
         """
-        return self._vec_get_action(self._actor_replicas, obs, keys, action)
+        return self._vec_get_action(self._actor_replicas, obs, keys)
 
+    def get_action_log_probs(
+        self,
+        obs: jax.Array,
+        actions: jax.Array
+    ) -> Tuple[jax.Array, jax.Array]:
+        """
+        These should be vectorized inputs
+        """
+        return self._vec_get_action_log_probs(self._actor_replicas, obs, actions)
 
     def unpack_actors(self) -> Sequence[ActorMLP]:
         return unstack_modules(
@@ -179,7 +209,7 @@ if __name__ == "__main__":
     output = actor(input)
 
     print(output)
-    print(actor.get_action(input, jax.random.key(0)))
+    print(actor.get_action(input, key=jax.random.key(0)))
 
     key = jax.random.key(0)
     vec_actor = VectorizedActor(actor, num_replicas=2, key=key)
@@ -194,9 +224,17 @@ if __name__ == "__main__":
     key = jax.random.key(0)
     split_keys = jnp.expand_dims(jax.random.split(key, 2), -1)
     print(inputs.shape, split_keys.shape)
-    print(vec_actor.get_action(inputs, split_keys))
+    print(vec_actor.get_action(inputs, keys=split_keys))
+
+    key = jax.random.key(0)
+    split_keys = jnp.expand_dims(jax.random.split(key, 2), -1)
+    print(inputs.shape, split_keys.shape)
+    a, lp1, e1 = vec_actor.get_action(inputs, keys=split_keys)
+    lp2, e2 = vec_actor.get_action_log_probs(inputs, a)
+    assert all([(lp1 == lp2).all(), (e1 == e2).all()])
+
 
     [nnx.display(a) for a in vec_actor.unpack_actors()]
 
     get_action = jax.jit(vec_actor.get_action)
-    print(get_action(inputs, split_keys))
+    print(get_action(inputs, keys=split_keys))

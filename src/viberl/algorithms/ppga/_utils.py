@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import jax
 import jax.numpy as jnp
@@ -33,20 +33,20 @@ def v_loss(
         return ((new_values - returns.flatten()) ** 2).mean()
 
 def calculate_discounted_sum(
-    x: jax.Array,
+    deltas: jax.Array,
     dones: jax.Array,
     discount: float,
-    prev_x: Optional[jax.Array] = None
+    prev_deltas: Optional[jax.Array] = None
 ) -> jax.Array:
 
-    if prev_x is None:
-        cummulative = jnp.zeros_like(x[-1])
+    if prev_deltas is None:
+        cummulative = jnp.zeros_like(deltas[-1])
     else:
-        cummulative = prev_x
+        cummulative = prev_deltas
 
-    discounted_sum = jnp.zeros_like(x)
+    discounted_sum = jnp.zeros_like(deltas)
 
-    i = len(x) - 1
+    i = len(deltas) - 1
 
     def _cond(carry: Tuple[int, jax.Array, jax.Array]) -> bool:
         i_, _, _ = carry
@@ -54,7 +54,7 @@ def calculate_discounted_sum(
 
     def _body(carry: Tuple[int, jax.Array, jax.Array]) -> Tuple[int, jax.Array, jax.Array]:
         i_, discounted_sum_, cummulative_ = carry
-        cummulative_ = x[i_] + discount * cummulative_ * (1.0 - dones[i_])
+        cummulative_ = deltas[i_] + discount * cummulative_ * (1.0 - dones[i_])
         discounted_sum_ = discounted_sum_.at[i_].set(cummulative_)
         return i_ - 1, discounted_sum_, cummulative_
 

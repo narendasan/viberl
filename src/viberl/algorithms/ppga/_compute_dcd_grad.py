@@ -33,23 +33,33 @@ from viberl.algorithms.ppga._config import Config
 from viberl.algorithms.ppga._state import VPPOState
 
 
-def _calculate_returns(state: VPPOState, cfg: Config, rollouts: Rollout) -> Tuple[jax.Array, jax.Array]:
+def _calculate_returns(state: VPPOState, cfg: Config, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     jax.lax.stop_gradient(state)
-    last_obs = rollouts.obs[-1]
+
+    # Instead of just using rewards, now each axis is looking at its measure
+    mask = jnp.eye(cfg.num_measures + 1)
+    # TODO: Make num_envs the number of envs / PPO instance vs global
+    mask = jnp.expand_dims(jnp.repeat(mask, cfg.num_envs // (cfg.num_measures + 1), axis=0), axis=0)
+
+    rew_measures = jnp.concat((jnp.expand_dims(rollout.rewards, axis=2), rollout.measures), axis=2)
+    rew_measures = jnp.sum((rew_measures * mask), axis=2)
+
+    last_obs = rollout.obs[-1]
     next_values = state.mean_critic.get_value(last_obs)
+    _dones = rollout.dones
 
     if cfg.normalize_returns:
         ...
 
     if cfg.value_bootstrap:
-        rewards = rollouts.rewards + cfg.gamma * dones * rollouts.truncated * rollout.values
+        _rewards = rew_measures + cfg.gamma * _dones * rollout.truncated * rollout.values
     else:
-        rewards = rollout.rewards
+        _rewards = rew_measures
 
     _values = jnp.stack([rollout.values, next_values], axis=0)
 
-    deltas = (rewards - _values[:-1]) + (1 - dones) * (cfg.gamma * _values[1:])
-    advantages = calculate_discounted_sum(deltas, dones, cfg.gamma * cfg.gae_lambda)
+    deltas = (_rewards - _values[:-1]) + (1 - _dones) * (cfg.gamma * _values[1:])
+    advantages = calculate_discounted_sum(deltas, _dones, cfg.gamma * cfg.gae_lambda)
 
     returns = advantages + _values[:-1]
 
@@ -69,9 +79,9 @@ def _qd_agents_mb_loss(
     b_values = rollout.values[:, mb_idxs]
     b_logprobs = rollout.logprobs[:, mb_idxs]
 
-    _, logprob, entropy = state.actors.get_action(b_obs, b_actions)
+    _, logprob, entropy = state.actors.get_action_log_probs(b_obs, actions=b_actions)
 
-    values = state.mean_critic.get_value(b_obs[:, mb_idxs])
+    values = state.qd_critic.get_all_values(b_obs[:, mb_idxs])
 
     log_ratio = (logprob - b_logprobs).flatten()
     ratio = jnp.exp(log_ratio)
@@ -138,6 +148,8 @@ def compute_dcd_grad(
     negative_measure_gradients: bool = False
 ):
 
+    actor_key, critic_key = jax.random.split(key, 2)
+
     next_obs = env.reset()
     if cfg.normalize_obs:
         next_obs = state.actors.normalize_obs(next_obs)
@@ -158,12 +170,14 @@ def compute_dcd_grad(
 
             _obs = rollout.obs.at[step].set(next_obs)
 
-            action, logprob, _ = state.actors.get_action(next_obs)
+            # Key needs to be split
+            action, logprob, _ = state.actors.get_action(next_obs, keys=actor_key)
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 
-            value = state.mean_critic.get_value(next_obs)
-            _values = rollout.values.at[step].set(value)
+
+            values = state.qd_critic.get_all_values(next_obs)
+            _values = rollout.values.at[step].set(values)
 
             next_obs, reward, dones, infos = vec_env.step(action)
             if cfg.normalize_obs:
