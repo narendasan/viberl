@@ -1,9 +1,5 @@
-from typing import Tuple
-
-from flax import nnx
-
 import chex
-import jax.numpy as jnp
+from flax import nnx
 
 from viberl.models._actor import VectorizedActor
 from viberl.models._critic import QDCritic, CriticMLP
@@ -17,3 +13,4 @@ class VPPOState:
     actor_optimizer: nnx.Optimizer
     qd_critic_optmizer: nnx.Optimizer
     mean_critic_optimizer: nnx.Optimizer
+    total_reward: float

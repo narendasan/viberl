@@ -70,7 +70,7 @@ class ActorMLP(nnx.Module):
         self,
         obs: jax.Array,
         *,
-        action: Optional[jax.Array] = None
+        action: jax.Array
     ) -> Tuple[jax.Array, jax.Array]:
         action_mean = self.action_mean(obs)
         action_logstd = jnp.reshape(self.action_logstd.value, action_mean.shape)

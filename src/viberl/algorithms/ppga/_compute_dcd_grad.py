@@ -1,33 +1,11 @@
-from typing import Optional, Tuple, Sequence
+from typing import Tuple
 
+from flax import nnx
 import jax
 import jax.numpy as jnp
 
-import chex
-import gymnax
-from jaxlib.mlir.ir import VectorType
-import numpy as np
-from numpy.lib.function_base import vectorize
-import optax
-from flax import nnx
-from flax import struct
-from flax.training.train_state import TrainState
-
-from rejax.algos.algorithm import Algorithm, register_init
-from rejax.algos.mixins import (
-    NormalizeObservationsMixin,
-    NormalizeRewardsMixin,
-    OnPolicyMixin,
-)
-from rejax.networks import DiscretePolicy, GaussianPolicy, VNetwork
-
-from viberl.models._actor import VectorizedActor, ActorMLP
-from viberl.models._critic import QDCritic, CriticMLP
-
 from viberl.algorithms.ppga._batch_update import batch_update
 from viberl.algorithms.ppga._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
-from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
-
 from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppga._config import Config
 from viberl.algorithms.ppga._state import VPPOState
@@ -189,13 +167,7 @@ def compute_dcd_grad(
             measures = -infos["measures"] if negative_measure_gradients else infos["measures"]
             _measures = rollout.measures.at[step].set(measures)
 
-            reward_measures = jnp.stack([reward, measures], axis=1)
-            reward_measures *= state._grad_coeffs
-            reward = jnp.sum(reward_measures, axis=1)
-
             _rewards = rollout.rewards.at[step].set(reward)
-
-            state.total_rewards += reward
 
             rollout = Rollout(
                 obs=_obs,

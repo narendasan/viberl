@@ -1,9 +1,8 @@
-from typing import Tuple, Sequence, Callable, Optional, List
+from typing import Tuple, Sequence, Callable, Optional
 import itertools
 
 import jax
 import jax.numpy as jnp
-import distrax
 from flax import nnx
 
 from viberl.utils import tree_stack
@@ -50,7 +49,7 @@ class QDCritic(object):
                  hidden_dims: Sequence[int] = [256, 265],
                  activation_fn: Callable = nnx.tanh,
                  num_critics: Optional[int] = None,
-                 critic_list: Optional[List[nnx.Module]] = None,
+                 critic_list: Optional[Sequence[nnx.Module]] = None,
                  key: jax.random.key):
         super().__init__()
 

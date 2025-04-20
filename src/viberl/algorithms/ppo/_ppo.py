@@ -4,14 +4,14 @@ import jax
 import jax.numpy as jnp
 from flax import nnx
 
-from viberl.algorithms.ppga._batch_update import batch_update
-from viberl.algorithms.ppga._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
-from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
-from viberl.algorithms.ppga._config import Config
-from viberl.algorithms.ppga._state import VPPOState
+from viberl.algorithms.ppo._batch_update import batch_update
+from viberl.algorithms.ppo._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
+from viberl.algorithms.ppo._rollout import Rollout, make_empty_rollout
+from viberl.algorithms.ppo._config import Config
+from viberl.algorithms.ppo._state import PPOState
 
 
-def _calculate_returns(state: VPPOState, cfg: Config, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
+def _calculate_returns(state: PPOState, cfg: Config, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     jax.lax.stop_gradient(state)
     last_obs = rollout.obs[-1]
     next_values = state.mean_critic(last_obs)
@@ -33,8 +33,8 @@ def _calculate_returns(state: VPPOState, cfg: Config, rollout: Rollout) -> Tuple
 
     return advantages, returns
 
-def _mean_agent_mb_loss(
-    state: VPPOState,
+def _mb_loss(
+    state: PPOState,
     cfg: Config,
     rollout: Rollout,
     advantages: jax.Array,
@@ -47,9 +47,9 @@ def _mean_agent_mb_loss(
     b_values = rollout.values[:, mb_idxs]
     b_logprobs = rollout.logprobs[:, mb_idxs]
 
-    logprob, entropy = state.actors.get_action_log_probs(b_obs, b_actions)
+    logprob, entropy = state.actor.get_action_log_probs(b_obs, action=b_actions)
 
-    values = state.mean_critic(b_obs[:, mb_idxs])
+    values = state.critic(b_obs[:, mb_idxs])
 
     log_ratio = (logprob - b_logprobs).flatten()
     ratio = jnp.exp(log_ratio)
@@ -77,8 +77,8 @@ def _mean_agent_mb_loss(
 
 
 @nnx.jit
-def _mean_agent_train_step(
-    state: VPPOState,
+def _train_step(
+    state: PPOState,
     cfg: Config,
     rollout: Rollout,
     advantages: jax.Array,
@@ -86,7 +86,7 @@ def _mean_agent_train_step(
     mb_idxs: jax.Array
 ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
 
-    grad_fn = nnx.value_and_grad(_mean_agent_mb_loss, has_aux=True)
+    grad_fn = nnx.value_and_grad(_mb_loss, has_aux=True)
     (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs)
     state.metrics.update( # TODO: Do we need seperate metrics?
         loss=loss,
@@ -101,13 +101,13 @@ def _mean_agent_train_step(
     # Grad clipping is part of the optimizer
     state.actor_optimizer.update(grads)
     # Grad clipping is part of the optimizer
-    state.mean_critic_optimizer.update(grads)
+    state.critic_optimizer.update(grads)
 
     return (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio)
 
 
-def update_mean_agent(
-    state: VPPOState,
+def train(
+    state: PPOState,
     cfg: Config,
     env: Env,
     num_updates: int,
@@ -136,16 +136,16 @@ def update_mean_agent(
 
             _obs = rollout.obs.at[step].set(next_obs)
 
-            action, logprob, _ = state.actors.get_action(next_obs, keys=actor_keys)
+            action, logprob, _ = state.actor.get_action(next_obs, key=actor_key)
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 
-            value = state.mean_critic.get_value(next_obs)
+            value = state.critic.get_value(next_obs)
             _values = rollout.values.at[step].set(value)
 
             next_obs, reward, dones, infos = vec_env.step(action)
             if cfg.normalize_obs:
-                next_obs = state.actors.normalize_obs(next_obs)
+                next_obs = state.actor.normalize_obs(next_obs)
 
             _truncated = rollout.truncated.at[step].set(infos["truncation"])
             _dones = rollout.dones.at[step].set(dones)
@@ -160,6 +160,7 @@ def update_mean_agent(
             _rewards = rollout.rewards.at[step].set(reward)
 
             state.total_rewards += reward
+            state.ep_len += 1
 
             rollout = Rollout(
                 obs=_obs,
@@ -178,5 +179,5 @@ def update_mean_agent(
             cfg,
             rollout,
             calculate_returns_fn=_calculate_returns,
-            train_step_fn=_mean_agent_train_step
+            train_step_fn=_train_step
         )

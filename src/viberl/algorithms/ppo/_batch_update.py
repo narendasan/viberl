@@ -1,21 +1,21 @@
-from typing import Tuple, Callable, List
+from typing import Optional, Tuple, Callable, List, TypedDict
 import logging
 
 import jax
 import jax.numpy as jnp
 
-from viberl.algorithms.ppga._rollout import Rollout
-from viberl.algorithms.ppga._config import Config
-from viberl.algorithms.ppga._state import VPPOState
+from viberl.algorithms.ppo._rollout import Rollout
+from viberl.algorithms.ppo._config import Config
+from viberl.algorithms.ppo._state import PPOState
 
 _LOGGER = logging.getLogger(__name__)
 
-train_fn = Callable[[VPPOState, Config, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array, jax.Array]]
+train_fn = Callable[[PPOState, Config, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array, jax.Array]]
 
-returns_fn = Callable[[VPPOState, Config, Rollout], Tuple[jax.Array, jax.Array]]
+returns_fn = Callable[[PPOState, Config, Rollout], Tuple[jax.Array, jax.Array]]
 
 def batch_update(
-    state: VPPOState,
+    state: PPOState,
     cfg: Config,
     rollout: Rollout,
     *,
@@ -25,7 +25,7 @@ def batch_update(
     advantages, returns = calculate_returns_fn(state, cfg, rollout)
 
     if cfg.normalize_returns:
-        returns = state.actors.normalize_returns(returns)
+        returns = state.actor.normalize_returns(returns)
 
     batch_size = rollout.obs.shape[1]
     minibatch_size = batch_size // cfg.num_minibatches
