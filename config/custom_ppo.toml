@@ -8,7 +8,7 @@ algorithm = "ppo"
 max_ckpt_to_keep = 5
 results_dir = "results"
 log_dir = "logs"
-log_level = "INFO"
+log_level = "DEBUG"
 
 [algorithm]
 actor_lr = 3e-4
@@ -36,4 +36,4 @@ v_bootstrap = false
 weight_decay = 0.0
 rollout_len = 128
 total_timesteps = 1_000_000
-num_envs = 10
+num_envs = 2

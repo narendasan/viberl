@@ -1,5 +1,7 @@
 from typing import Tuple
 
+import logging
+from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
 import jax
 import jax.numpy as jnp
@@ -11,6 +13,7 @@ from viberl.algorithms.ppo._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppo._config import Config
 from viberl.algorithms.ppo._state import PPOState
 
+_LOGGER = logging.getLogger(__name__)
 
 def _calculate_returns(state: PPOState, cfg: Config, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1]
@@ -113,16 +116,26 @@ def _train_step(
 def train(
     state: PPOState,
     cfg: Config,
-    env: Environment,
-    num_updates: int,
-    rollout_len: int,
+    env_info: Tuple[Environment, EnvParams],
     key: jax.random.key,
+    *,
     negative_measure_gradients: bool = False
 ):
+    env, env_params = env_info
+    vmap_reset = jax.vmap(env.reset, in_axes=(0, None))
+    vmap_step = jax.vmap(env.step, in_axes=(0, 0, 0, None))
 
-    next_obs = env.reset()
+    key, reset_key = jax.random.split(key, 2)
+    next_obs, env_state = vmap_reset(jax.random.split(reset_key, cfg.num_envs), env_params)
+
+    if len(next_obs.shape) == 1:
+        next_obs = jnp.expand_dims(next_obs, axis=0)
+
     if cfg.normalize_obs:
-        next_obs = state.actors.normalize_obs(next_obs)
+        next_obs = state.actor.normalize_obs(next_obs)
+
+    num_updates = cfg.total_timesteps // (cfg.rollout_len * cfg.num_envs)
+    _LOGGER.info(f"Training for {num_updates} updates")
 
     global_step = 0
     for u in range(1, num_updates + 1):
@@ -130,36 +143,48 @@ def train(
         rollout = make_empty_rollout(
             cfg.rollout_len,
             cfg.num_envs,
-            env.obs_shape,
-            env.action_shape,
-            cfg.num_measures
+            env.observation_space(env_params).shape,
+            env.action_space(env_params).shape,
         )
 
-        for step in range(rollout_len):
+        _LOGGER.debug(f"Rollout: {rollout.shapes}")
+
+        for step in range(cfg.rollout_len):
             global_step += cfg.num_envs
 
             _obs = rollout.obs.at[step].set(next_obs)
 
-            action, logprob, _ = state.actor.get_action(next_obs, key=actor_key)
+            key, action_key, env_step_key = jax.random.split(key, 3)
+
+            action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
+            _LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
+
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 
             value = state.critic(next_obs)
+            _LOGGER.debug(f"Value: {value.shape}")
+
             _values = rollout.values.at[step].set(value)
 
-            next_obs, reward, dones, infos = vec_env.step(action)
+            next_obs, env_state, reward, dones, infos = vmap_step(
+                jax.random.split(env_step_key, cfg.num_envs),
+                env_state,
+                action,
+                env_params
+            )
+
+            if len(next_obs.shape) == 1:
+                next_obs = jnp.expand_dims(next_obs, axis=0)
+
             if cfg.normalize_obs:
                 next_obs = state.actor.normalize_obs(next_obs)
 
             _truncated = rollout.truncated.at[step].set(infos["truncation"])
             _dones = rollout.dones.at[step].set(dones)
 
-            measures = -infos["measures"] if negative_measure_gradients else infos["measures"]
-            _measures = rollout.measures.at[step].set(measures)
-
-            reward_measures = jnp.stack([reward, measures], axis=1)
-            reward_measures *= state._grad_coeffs
-            reward = jnp.sum(reward_measures, axis=1)
+            reward *= state.actor._grad_coeffs
+            reward = jnp.sum(reward, axis=1)
 
             _rewards = rollout.rewards.at[step].set(reward)
 
@@ -174,7 +199,6 @@ def train(
                 dones=_dones,
                 truncated=_truncated,
                 values=_values,
-                measures=_measures,
             )
 
 

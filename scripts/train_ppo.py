@@ -41,7 +41,7 @@ agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 # Here we create a vector of N agents that we will train seeded with their own key derived from the root key
 env_info = create("brax/walker2d")
 cfg = Config(**config["algorithm"])
-rngs = flax.nnx.Rngs(config["experiment"]["root_seed"])
+rngs = flax.nnx.Rngs(root_key)
 ppo_state = make_ppo_state(cfg, env_info, rngs)
 print(ppo_state)
 # We then insert the callbacks for logging and reporting on training process into each agent
@@ -56,6 +56,8 @@ print(ppo_state)
 #         ],
 #     )
 # )
+#
+
 
 # We then can vectorize across NxM instances of agents and envs and train these in parallel
 # This can just be run as JIT, but further gains can be gotten from lowering and AOT compiling the training function
@@ -63,7 +65,7 @@ _LOGGER.info("Compiling training function...")
 #vmap_train = jax.jit(jax.vmap(train)).lower(agent_keys).compile()
 
 # _LOGGER.info("Training...")
-train_states, results = train(agent_keys)
+train(ppo_state, cfg, env_info, root_key)
 # print(results)
 # agent_ts = tree_unstack(train_states)
 

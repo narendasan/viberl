@@ -60,6 +60,7 @@ class ActorMLP(nnx.Module):
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self.action_mean(obs)
 
+
     def get_action(
         self,
         obs: jax.Array,
@@ -67,12 +68,12 @@ class ActorMLP(nnx.Module):
         key: jax.Array,
     ) -> Tuple[jax.Array, jax.Array, jax.Array]:
         action_mean = self.action_mean(obs)
-        action_logstd = jnp.reshape(self.action_logstd.value, action_mean.shape)
+        action_logstd = jnp.broadcast_to(self.action_logstd.value, action_mean.shape)
         action_std = jnp.exp(action_logstd)
         dist = distrax.Normal(action_mean, action_std)
         action = dist.sample(seed=key)
 
-        return action, dist.log_prob(action), dist.entropy()
+        return action, dist.log_prob(action).sum(axis=1), dist.entropy()
 
     def get_action_log_probs(
         self,
@@ -84,7 +85,7 @@ class ActorMLP(nnx.Module):
         action_logstd = jnp.reshape(self.action_logstd.value, action_mean.shape)
         action_std = jnp.exp(action_logstd)
         dist = distrax.Normal(action_mean, action_std)
-        return dist.log_prob(action), dist.entropy()
+        return dist.log_prob(action).sum(axis=1), dist.entropy()
 
     @staticmethod
     @jax.jit
@@ -188,7 +189,7 @@ class VectorizedActor(object):
             action_std = jnp.exp(action_logstd)
             dist = distrax.Normal(action_mean, action_std)
             action = dist.sample(seed=key[0])
-            return action, dist.log_prob(action), dist.entropy()
+            return action, dist.log_prob(action).sum(axis=1), dist.entropy()
 
         self._vec_get_action = vec_get_action
 
@@ -202,7 +203,7 @@ class VectorizedActor(object):
             action_logstd = jnp.reshape(replicas.action_logstd.value, action_mean.shape)
             action_std = jnp.exp(action_logstd)
             dist = distrax.Normal(action_mean, action_std)
-            return dist.log_prob(action), dist.entropy()
+            return dist.log_prob(action).sum(axis=1), dist.entropy()
 
         self._vec_get_action_log_probs = vec_get_action_log_probs
 

@@ -22,7 +22,7 @@ class PPOState:
     train_metrics: nnx.MultiMetric
     actor_optimizer: nnx.Optimizer
     critic_optimizer: nnx.Optimizer
-    total_reward: chex.Array
+    total_rewards: chex.Array
     ep_len: chex.Array
 
 def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> PPOState:
@@ -79,6 +79,6 @@ def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: n
         train_metrics=train_metrics,
         actor_optimizer=actor_optimizer,
         critic_optimizer=critic_optimizer,
-        total_reward=total_reward,
+        total_rewards=total_reward,
         ep_len=ep_len
     )

@@ -51,5 +51,6 @@ def setup_logger(config: Dict[str, Any]) -> None:
         })
 
     logging.getLogger("jax._src.xla_bridge").propagate = False
+    logging.getLogger("jax._src").propagate = False
     logging.getLogger("absl").propagate = False
     return
