@@ -1,13 +1,19 @@
+from typing import Tuple
+
 import chex
 from flax import nnx
+from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
 from jax import numpy as jnp
 from numpy.ma.core import exp
 import optax
+import logging
 
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
 from viberl.algorithms.ppo._config import Config
+
+_LOGGER = logging.getLogger(__name__)
 
 @chex.dataclass
 class PPOState:
@@ -19,22 +25,26 @@ class PPOState:
     total_reward: chex.Array
     ep_len: chex.Array
 
-def make_ppo_state(cfg: Config, env: Environment, rngs: nnx.Rngs) -> PPOState:
+def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> PPOState:
     actor = ActorMLP(
-        env.observation_space(),
-        env.action_space(),
+        env_info[0].observation_space(env_info[1]).shape,
+        env_info[0].action_space(env_info[1]).shape,
         hidden_dims=cfg.actor_hidden_dims,
         activation_fn=cfg.actor_activation_fn,
         normalize_obs=cfg.normalize_obs,
         normalize_returns=cfg.normalize_returns,
         rngs=rngs
     )
+    _LOGGER.info(f"Actor network {actor}")
+
     critic = CriticMLP(
-        env.observation_space(),
+        env_info[0].observation_space(env_info[1]).shape,
         hidden_dims=cfg.critic_hidden_dims,
         activation_fn=cfg.critic_activation_fn,
         rngs=rngs
     )
+    _LOGGER.info(f"Critic network {critic}")
+
     train_metrics = nnx.MultiMetric(
         loss=nnx.metrics.Average(),
         policy_loss=nnx.metrics.Average(),
@@ -64,10 +74,11 @@ def make_ppo_state(cfg: Config, env: Environment, rngs: nnx.Rngs) -> PPOState:
     ep_len = jnp.zeros((cfg.num_envs,))
 
     return PPOState(
-        actor,
-        critic,
-        train_metrics,
-        actor_optimizer,
-        critic_optimizer,
-        total_reward,
-        ep_len)
+        actor=actor,
+        critic=critic,
+        train_metrics=train_metrics,
+        actor_optimizer=actor_optimizer,
+        critic_optimizer=critic_optimizer,
+        total_reward=total_reward,
+        ep_len=ep_len
+    )
