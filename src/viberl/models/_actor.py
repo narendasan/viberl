@@ -9,7 +9,6 @@ from flax import nnx
 from viberl.utils import tree_stack
 from viberl.utils._pytrees import unstack_modules
 
-# TODO: Implement obs and return normalization
 class ActorMLP(nnx.Module):
     def __init__(
         self,
@@ -17,7 +16,7 @@ class ActorMLP(nnx.Module):
         action_shape: Tuple[int],
         *,
         hidden_dims: Sequence[int] = [128, 128],
-        activation_fn: Callable = nnx.tanh,
+        activation_fn: Callable | str = nnx.tanh,
         normalize_obs: bool = False,
         normalize_returns: bool = False,
         normalize_epsilon: float = 1e-8,
@@ -28,6 +27,9 @@ class ActorMLP(nnx.Module):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.hidden_dims = hidden_dims
+
+        if isinstance(activation_fn, str):
+            activation_fn = getattr(nnx, activation_fn)
         self.activation_fn = activation_fn
 
         dims = [jnp.array(obs_shape).prod().item()] + list(hidden_dims) + [jnp.array(action_shape).prod().item()]

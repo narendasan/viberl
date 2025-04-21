@@ -13,9 +13,12 @@ class CriticMLP(nnx.Module):
                  obs_shape: Tuple[int],
                  *,
                  hidden_dims: Sequence[int] = [256, 265],
-                 activation_fn: Callable = nnx.tanh,
+                 activation_fn: Callable | str = nnx.tanh,
                  rngs:nnx.Rngs=nnx.Rngs(0)):
         super().__init__()
+
+        if isinstance(activation_fn, str):
+            activation_fn = getattr(nnx, activation_fn)
 
         dims = [jnp.array(obs_shape).prod().item()] + list(hidden_dims)
         dim_pairs = [(dims[i], dims[i+1]) for i in range(len(dims)-1)]
@@ -47,7 +50,7 @@ class QDCritic(object):
                  obs_shape: Tuple[int],
                  *,
                  hidden_dims: Sequence[int] = [256, 265],
-                 activation_fn: Callable = nnx.tanh,
+                 activation_fn: Callable | str = nnx.tanh,
                  num_critics: Optional[int] = None,
                  critic_list: Optional[Sequence[nnx.Module]] = None,
                  key: jax.random.key):
@@ -58,6 +61,8 @@ class QDCritic(object):
         # Need to store so that when unpacking, the networks can be reconstructed
         self.obs_shape = obs_shape
         self.hidden_dims = hidden_dims
+        if isinstance(activation_fn, str):
+            activation_fn = getattr(nnx, activation_fn)
         self.activation_fn = activation_fn
 
 
