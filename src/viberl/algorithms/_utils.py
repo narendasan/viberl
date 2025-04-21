@@ -7,12 +7,12 @@ import jax.numpy as jnp
 def normalize(a: jax.Array, eps: float=1e-8) -> jax.Array:
     return (a - a.mean()) / (a.std() + eps)
 
-def pg_loss(adv: jax.Array, ratio: jax.Array, *, clip_coef: float) -> jax.Array:
+def policy_grad_loss(adv: jax.Array, ratio: jax.Array, *, clip_coef: float) -> jax.Array:
     l1 = -adv * ratio
     l2 = -adv * jax.lax.clamp(ratio, 1 - clip_coef, 1 + clip_coef) # Why dont we just use l2?
     return jax.lax.max(l1, l2).mean()
 
-def v_loss(
+def value_loss(
     new_values: jax.Array,
     old_values: jax.Array,
     returns: jax.Array,

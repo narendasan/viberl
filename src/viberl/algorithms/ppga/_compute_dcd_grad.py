@@ -5,7 +5,7 @@ import jax
 import jax.numpy as jnp
 
 from viberl.algorithms.ppga._batch_update import batch_update
-from viberl.algorithms.ppga._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
+from viberl.algorithms._utils import normalize, policy_grad_loss, value_loss, calculate_discounted_sum
 from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppga._config import Config
 from viberl.algorithms.ppga._state import VPPOState
@@ -72,8 +72,8 @@ def _qd_agents_mb_loss(
     if cfg.normalize_advantages:
         mb_advantages = normalize(mb_advantages)
 
-    pg_loss = pg_loss(mb_advantages, ratio, clip_coef=cfg.clip_coef)
-    v_loss = v_loss(
+    pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.clip_coef)
+    v_loss = value_loss(
         values,
         b_values,
         returns,

@@ -1,4 +1,4 @@
-from typing import Tuple, Sequence, Callable, Optional, List
+from typing import Tuple, Sequence, Callable, Optional
 import itertools
 
 import jax
@@ -18,19 +18,17 @@ class ActorMLP(nnx.Module):
         *,
         hidden_dims: Sequence[int] = [128, 128],
         activation_fn: Callable = nnx.tanh,
-        normalize_obs: bool=False,
-        normalize_returns: bool=False,
+        normalize_obs: bool = False,
+        normalize_returns: bool = False,
+        normalize_epsilon: float = 1e-8,
         rngs:nnx.Rngs=nnx.Rngs(0)
     ):
         super().__init__()
-
 
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.hidden_dims = hidden_dims
         self.activation_fn = activation_fn
-        self.normalize_obs = normalize_obs
-        self.normalize_returns = normalize_returns
 
         dims = [jnp.array(obs_shape).prod().item()] + list(hidden_dims) + [jnp.array(action_shape).prod().item()]
         dim_pairs = [(dims[i], dims[i+1]) for i in range(len(dims)-1)]
@@ -48,6 +46,14 @@ class ActorMLP(nnx.Module):
         ]))) #type: ignore
 
         self.action_logstd = nnx.Param(jnp.zeros((1, jnp.array(action_shape).prod().item())))
+
+        self.obs_mean = nnx.Param(jnp.ones(self.obs_shape))
+        self.obs_var = nnx.Param(jnp.ones(self.obs_shape))
+        self.obs_count = nnx.Param(jnp.ones((1,)))
+        self.returns_mean = nnx.Param(jnp.ones(1,))
+        self.returns_var = nnx.Param(jnp.ones((1,)))
+        self.returns_count = nnx.Param(jnp.ones((1,)))
+        self.normalize_eps = nnx.Param(jnp.ones((1,)))
 
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self.action_mean(obs)
@@ -77,6 +83,42 @@ class ActorMLP(nnx.Module):
         action_std = jnp.exp(action_logstd)
         dist = distrax.Normal(action_mean, action_std)
         return dist.log_prob(action), dist.entropy()
+
+    @staticmethod
+    @jax.jit
+    def _update_running_stats(
+        batch: jax.Array,
+        mean: jax.Array,
+        var: jax.Array,
+        count: jax.Array
+    ) -> Tuple[jax.Array, jax.Array, jax.Array]:
+        batch_mean = jnp.mean(batch, axis=0)
+        batch_var = jnp.var(batch, axis=0)
+        batch_count = batch.shape[0]
+
+        delta = batch_mean - mean
+        tot_count = count + batch_count
+
+        new_mean = mean + delta * batch_count / tot_count
+        m_a = var * count
+        m_b = batch_var * batch_count
+        m2 = m_a + m_b + (delta ** 2) * count * batch_count / tot_count
+        new_var = m2 / tot_count
+        new_count = tot_count
+        return new_mean, new_var, new_count
+
+    def normalize_obs(self, batch: jax.Array) -> jax.Array:
+        self.obs_mean, self.obs_var, self.obs_count = ActorMLP._update_running_stats(
+            batch, self.obs_mean, self.obs_var, self.obs_count
+        )
+        return (batch - self.obs_mean) / jnp.sqrt(self.obs_var + self.normalize_eps)
+
+    def normalize_returns(self, batch: jax.Array) -> jax.Array:
+        self.returns_mean, self.returns_var, self.returns_count = ActorMLP._update_running_stats(
+            batch, self.returns_mean, self.returns_var, self.returns_count
+        )
+        return jax.lax.clamp(-5.0, (batch - self.returns_mean) / jnp.sqrt(self.returns_var + self.normalize_eps), 5.0)
+
 
 class VectorizedActor(object):
     """
@@ -162,6 +204,24 @@ class VectorizedActor(object):
 
         self._vec_get_action_log_probs = vec_get_action_log_probs
 
+        @nnx.vmap(in_axes=0, out_axes=0, axis_size=self.num_replicas)
+        def vec_normalize_obs(
+            replicas: ActorMLP,
+            batch: jax.Array,
+        ) -> jax.Array:
+            return replicas.normalize_obs(batch)
+
+        self._vec_normalize_obs = vec_normalize_obs
+
+        @nnx.vmap(in_axes=0, out_axes=0, axis_size=self.num_replicas)
+        def vec_normalize_returns(
+            replicas: ActorMLP,
+            batch: jax.Array,
+        ) -> jax.Array:
+            return replicas.normalize_returns(batch)
+
+        self._vec_normalize_returns = vec_normalize_returns
+
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self._vec_mean_action(self._actor_replicas, obs)
 
@@ -184,6 +244,18 @@ class VectorizedActor(object):
         These should be vectorized inputs
         """
         return self._vec_get_action_log_probs(self._actor_replicas, obs, actions)
+
+    def normalize_obs(
+        self,
+        batch: jax.Array,
+    ) -> jax.Array:
+        return self._vec_normalize_obs(self._actor_replicas, batch)
+
+    def normalize_returns(
+        self,
+        batch: jax.Array,
+    ) -> jax.Array:
+        return self._vec_normalize_returns(self._actor_replicas, batch)
 
     def unpack_actors(self) -> Sequence[ActorMLP]:
         return unstack_modules(
@@ -232,7 +304,6 @@ if __name__ == "__main__":
     a, lp1, e1 = vec_actor.get_action(inputs, keys=split_keys)
     lp2, e2 = vec_actor.get_action_log_probs(inputs, a)
     assert all([(lp1 == lp2).all(), (e1 == e2).all()])
-
 
     [nnx.display(a) for a in vec_actor.unpack_actors()]
 

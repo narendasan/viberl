@@ -5,21 +5,20 @@ import jax.numpy as jnp
 from flax import nnx
 
 from viberl.algorithms.ppo._batch_update import batch_update
-from viberl.algorithms.ppo._utils import normalize, pg_loss, v_loss, calculate_discounted_sum
+from viberl.algorithms._utils import normalize, policy_grad_loss, value_loss, calculate_discounted_sum
 from viberl.algorithms.ppo._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppo._config import Config
 from viberl.algorithms.ppo._state import PPOState
 
 
 def _calculate_returns(state: PPOState, cfg: Config, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
-    jax.lax.stop_gradient(state)
     last_obs = rollout.obs[-1]
-    next_values = state.mean_critic(last_obs)
+    next_values = state.critic(last_obs)
 
     if cfg.normalize_returns:
         ...
 
-    if cfg.value_bootstrap:
+    if cfg.v_bootstrap:
         rewards = rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * rollout.values
     else:
         rewards = rollout.rewards
@@ -56,14 +55,14 @@ def _mb_loss(
 
     old_approx_kl = jnp.mean(-log_ratio)
     approx_kl = jnp.mean(((ratio - 1.0) - log_ratio))
-    clipfracs = jnp.mean((jnp.abs(ratio - 1.0) > cfg.clip_coef).astype(jnp.float32)).item()
+    clipfracs = jnp.mean((jnp.abs(ratio - 1.0) > cfg.surrogate_clip_coef).astype(jnp.float32)).item()
 
     mb_advantages = advantages[:, mb_idxs].flatten()
     if cfg.normalize_advantages:
         mb_advantages = normalize(mb_advantages)
 
-    pg_loss = pg_loss(mb_advantages, ratio, clip_coef=cfg.clip_coef)
-    v_loss = v_loss(
+    pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
+    v_loss = value_loss(
         values,
         b_values,
         returns,
@@ -88,15 +87,19 @@ def _train_step(
 
     grad_fn = nnx.value_and_grad(_mb_loss, has_aux=True)
     (loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs)
-    state.metrics.update( # TODO: Do we need seperate metrics?
+
+    explained_var = 1 - jnp.var(returns - rollout.values) / jnp.var(returns)
+    state.train_metrics.update( # TODO: Do we need seperate metrics?
         loss=loss,
-        pg_loss=pg_loss,
-        v_loss=v_loss,
-        entropy_loss=entropy_loss,
+        policy_loss=pg_loss,
+        value_loss=v_loss,
+        entropy=entropy_loss,
         old_approx_kl=old_approx_kl,
         approx_kl=approx_kl,
-        clipfracs=clipfracs,
-        ratio=ratio
+        clipfrac=clipfracs,
+        explained_var=explained_var,
+        ratio_min=ratio.min(),
+        ratio_max=ratio.max()
     )
     # Grad clipping is part of the optimizer
     state.actor_optimizer.update(grads)
@@ -140,7 +143,7 @@ def train(
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 
-            value = state.critic.get_value(next_obs)
+            value = state.critic(next_obs)
             _values = rollout.values.at[step].set(value)
 
             next_obs, reward, dones, infos = vec_env.step(action)
