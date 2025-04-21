@@ -1,7 +1,9 @@
 import logging
 import os
 
+import flax
 import jax
+from rejax.compat import create
 from viberl.algorithms.ppo import Config, train, make_ppo_state
 
 from viberl.env import render_gymnax
@@ -37,8 +39,11 @@ root_key = jax.random.key(config["experiment"]["root_seed"])
 agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 
 # Here we create a vector of N agents that we will train seeded with their own key derived from the root key
+env, env_params = create("brax/walker2d")
 cfg = Config(**config["algorithm"])
-ppo_state = make_ppo_state(**cfg)
+rngs = flax.nnx.Rngs(config["experiment"]["root_seed"])
+ppo_state = make_ppo_state(cfg, env, rngs)
+print(ppo_state)
 # We then insert the callbacks for logging and reporting on training process into each agent
 # These transforms are functional so you get a new agent out instead of modifying in place
 # algo = algo.replace(

@@ -15,30 +15,25 @@ actor_lr = 3e-4
 critic_lr = 3e-4
 actor_hidden_dims = [128, 128]
 critic_hidden_dims = [128, 128]
-actor_activation_fn = "nnx.Tanh"
-critic_activation_fn = "nnx.Tanh"
+actor_activation_fn = "tanh"
+critic_activation_fn = "tanh"
 gamma = 0.99
 gae_lambda = 0.95
 num_minibatches = 8
 num_update_epochs = 4
-normalize_advantages = false      #true
+normalize_advantages = false    #true
 surrogate_clip_coef = 0.2
 clip_v_loss = true
 v_clip_coef = 0.2
 entropy_coef = 0.0
 v_coef = 2
-max_grad_norm = 1
+actor_max_grad_norm = 1
+critic_max_grad_norm = 1
 target_kl = 0.0
-normalize_obs = false             #true
-normalize_returns = false         #true
+normalize_obs = false           #true
+normalize_returns = false       #true
 v_bootstrap = false
 weight_decay = 0.0
-clip_obs_rew = true
 rollout_len = 128
-
-
-[algorithm.env_params]
-backend = "positional"
-
-[algorithm.agent_kwargs]
-activation = "relu"
+total_timesteps = 1_000_000
+num_envs = 10

@@ -1,5 +1,6 @@
 from typing import Tuple
 
+from gymnax.environments.environment import Environment
 import jax
 import jax.numpy as jnp
 from flax import nnx
@@ -112,7 +113,7 @@ def _train_step(
 def train(
     state: PPOState,
     cfg: Config,
-    env: Env,
+    env: Environment,
     num_updates: int,
     rollout_len: int,
     key: jax.random.key,

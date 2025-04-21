@@ -9,7 +9,6 @@ class Config:
     normalize_advantages: bool
     rollout_len: int
     num_envs: int
-    num_measures: int
     v_bootstrap: bool
     gamma: float
     gae_lambda: float
@@ -29,3 +28,5 @@ class Config:
     critic_lr: float
     actor_max_grad_norm: float
     critic_max_grad_norm: float
+    total_timesteps: int
+    weight_decay: float

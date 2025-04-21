@@ -1,5 +1,6 @@
 import chex
 from flax import nnx
+from gymnax.environments.environment import Environment
 from jax import numpy as jnp
 from numpy.ma.core import exp
 import optax
@@ -18,10 +19,10 @@ class PPOState:
     total_reward: chex.Array
     ep_len: chex.Array
 
-def make_ppo_state(cfg: Config, env, rngs: nnx.Rngs) -> PPOState:
+def make_ppo_state(cfg: Config, env: Environment, rngs: nnx.Rngs) -> PPOState:
     actor = ActorMLP(
-        env.obs_shape,
-        env.action_shape,
+        env.observation_space(),
+        env.action_space(),
         hidden_dims=cfg.actor_hidden_dims,
         activation_fn=cfg.actor_activation_fn,
         normalize_obs=cfg.normalize_obs,
@@ -29,7 +30,7 @@ def make_ppo_state(cfg: Config, env, rngs: nnx.Rngs) -> PPOState:
         rngs=rngs
     )
     critic = CriticMLP(
-        env.obs_shape,
+        env.observation_space(),
         hidden_dims=cfg.critic_hidden_dims,
         activation_fn=cfg.critic_activation_fn,
         rngs=rngs

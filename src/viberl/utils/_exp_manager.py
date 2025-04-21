@@ -13,8 +13,10 @@ def _generate_experiment_name(config: Dict[str, Any]) -> str:
     prefix += f"-seed{seed}"
     steps = config["algorithm"]["total_timesteps"]
     prefix += f"-steps{steps}"
-    lr = config["algorithm"]["learning_rate"]
-    prefix += f"-lr{lr}"
+    lr = config["algorithm"]["actor_lr"]
+    prefix += f"-alr{lr}"
+    lr = config["algorithm"]["critic_lr"]
+    prefix += f"-clr{lr}"
 
     if "tags" in config["experiment"]:
         tags = config["experiment"]["tags"]
