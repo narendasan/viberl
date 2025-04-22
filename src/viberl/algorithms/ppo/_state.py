@@ -46,16 +46,16 @@ def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: n
     _LOGGER.info(f"Critic network {critic}")
 
     train_metrics = nnx.MultiMetric(
-        loss=nnx.metrics.Average(),
-        policy_loss=nnx.metrics.Average(),
-        value_loss=nnx.metrics.Average(),
-        entropy=nnx.metrics.Average(),
-        old_approx_kl=nnx.metrics.Average(),
-        approx_kl=nnx.metrics.Average(),
-        clipfrac=nnx.metrics.Average(),
-        explained_var=nnx.metrics.Average(),
-        ratio_min=nnx.metrics.Average(),
-        ratio_max=nnx.metrics.Average()
+        loss=nnx.metrics.Average("loss"),
+        policy_loss=nnx.metrics.Average("policy_loss"),
+        value_loss=nnx.metrics.Average("value_loss"),
+        entropy=nnx.metrics.Average("entropy"),
+        old_approx_kl=nnx.metrics.Average("old_approx_kl"),
+        approx_kl=nnx.metrics.Average("approx_kl"),
+        clipfrac=nnx.metrics.Average("clipfrac"),
+        explained_var=nnx.metrics.Average("explained_var"),
+        ratio_min=nnx.metrics.Average("ratio_min"),
+        ratio_max=nnx.metrics.Average("ratio_max")
     )
 
     actor_optimizer = nnx.Optimizer(

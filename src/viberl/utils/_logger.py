@@ -16,7 +16,7 @@ def setup_logger(config: Dict[str, Any]) -> None:
     )
     logging.config.dictConfig({
             "version": 1,
-            "disable_existing_loggers": True if lvl != logging.DEBUG else False,
+            #"disable_existing_loggers": True if lvl != logging.DEBUG else False,
             "formatters": {
                 "brief": {
                     "format": "%(asctime)s - %(levelname)s - %(message)s",

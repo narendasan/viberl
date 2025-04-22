@@ -27,8 +27,9 @@ def batch_update(
     if cfg.normalize_returns:
         returns = state.actor.normalize_returns(returns)
 
-    batch_size = rollout.obs.shape[1]
+    batch_size = rollout.obs.shape[0]
     minibatch_size = batch_size // cfg.num_minibatches
+    _LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
 
     batch_idxs = jnp.arange(batch_size)
     clipfracs: List[jax.Array] = []

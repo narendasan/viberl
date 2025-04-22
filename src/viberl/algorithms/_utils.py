@@ -1,15 +1,18 @@
 from typing import Optional, Tuple
 
+import logging
+
 import jax
 import jax.numpy as jnp
 
+_LOGGER = logging.getLogger(__name__)
 
 def normalize(a: jax.Array, eps: float=1e-8) -> jax.Array:
     return (a - a.mean()) / (a.std() + eps)
 
 def policy_grad_loss(adv: jax.Array, ratio: jax.Array, *, clip_coef: float) -> jax.Array:
     l1 = -adv * ratio
-    l2 = -adv * jax.lax.clamp(ratio, 1 - clip_coef, 1 + clip_coef) # Why dont we just use l2?
+    l2 = -adv * jax.lax.clamp(1 - clip_coef, ratio, 1 + clip_coef) # Why dont we just use l2?
     return jax.lax.max(l1, l2).mean()
 
 def value_loss(
@@ -19,18 +22,20 @@ def value_loss(
     *,
     clip_coef: Optional[float],
 ) -> jax.Array:
+    _LOGGER.debug(f"new_values: {new_values.shape}, old_values: {old_values.shape}, returns: {returns.shape}")
 
     if clip_coef:
-        v_loss_unclipped = (new_values - returns.flatten()) ** 2
-        v_clipped = old_values.flatten() + jax.lax.clamp( # ??? why use old values
-            new_values - old_values.flatten(),
+        v_loss_unclipped = (new_values - returns) ** 2
+        v_clipped = old_values + jax.lax.clamp( # ??? why use old values
             -clip_coef,
+            new_values - old_values,
             clip_coef
         )
-        v_loss_clipped = (v_clipped - returns.flatten()) ** 2
-        return jax.lax.max(v_loss_unclipped, v_loss_clipped)
+        v_loss_clipped = (v_clipped - returns) ** 2
+        v_loss_max = jax.lax.max(v_loss_unclipped, v_loss_clipped)
+        return v_loss_max.mean()
     else:
-        return ((new_values - returns.flatten()) ** 2).mean()
+        return ((new_values - returns) ** 2).mean()
 
 def calculate_discounted_sum(
     deltas: jax.Array,

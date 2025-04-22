@@ -8,7 +8,6 @@ algorithm = "ppo"
 max_ckpt_to_keep = 5
 results_dir = "results"
 log_dir = "logs"
-log_level = "DEBUG"
 
 [algorithm]
 actor_lr = 3e-4
