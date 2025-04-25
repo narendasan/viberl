@@ -191,8 +191,6 @@ def batch_update(
         pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max
     )
 
-    print(state.train_metrics.compute())
-
     return pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio
 
 def train(
