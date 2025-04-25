@@ -24,7 +24,7 @@ def value_loss(
 ) -> jax.Array:
     _LOGGER.debug(f"new_values: {new_values.shape}, old_values: {old_values.shape}, returns: {returns.shape}")
 
-    if clip_coef:
+    if clip_coef is not None:
         v_loss_unclipped = (new_values - returns) ** 2
         v_clipped = old_values + jax.lax.clamp( # ??? why use old values
             -clip_coef,

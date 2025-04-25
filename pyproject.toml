@@ -7,15 +7,15 @@ authors = [{ name = "Naren Dasan", email = "naren@narendasan.com" }]
 requires-python = ">=3.11"
 dependencies = [
     "evosax>=0.1.6",
-    "jax[cuda12]>=0.5.0; sys_platform == 'linux'",
-    "jax>=0.5.0; sys_platform == 'darwin'",
-    "jumanji>=1.1.0",
-    "mnemonic>=0.21",
+    "jax[cuda12]>=0.6.0; sys_platform == 'linux'",
+    "jax>=0.6.0; sys_platform == 'darwin'",
     "orbax-checkpoint>=0.11.10",
     "rejax>=0.1.1",
     "tomli-w>=1.2.0",
     "ribs>=0.7.1",
     "distrax>=0.1.5",
+    "flax>=0.10.6",
+    "gymnax @ git+https://github.com/smorad/stable-gymnax@main",
 ]
 license = "NCSA"
 

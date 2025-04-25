@@ -22,8 +22,6 @@ class PPOState:
     train_metrics: nnx.MultiMetric
     actor_optimizer: nnx.Optimizer
     critic_optimizer: nnx.Optimizer
-    total_rewards: chex.Array
-    ep_len: chex.Array
 
 def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> PPOState:
     actor = ActorMLP(
@@ -70,8 +68,6 @@ def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: n
             optax.adam(learning_rate=cfg.critic_lr)
         )
     )
-    total_reward = jnp.zeros((cfg.num_envs,))
-    ep_len = jnp.zeros((cfg.num_envs,))
 
     return PPOState(
         actor=actor,
@@ -79,6 +75,4 @@ def make_ppo_state(cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: n
         train_metrics=train_metrics,
         actor_optimizer=actor_optimizer,
         critic_optimizer=critic_optimizer,
-        total_rewards=total_reward,
-        ep_len=ep_len
     )
