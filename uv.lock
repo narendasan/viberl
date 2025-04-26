@@ -3061,7 +3061,6 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "distrax" },
-    { name = "evosax" },
     { name = "flax" },
     { name = "gymnax" },
     { name = "jax", version = "0.6.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or sys_platform == 'linux'" },
@@ -3091,7 +3090,6 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "distrax", specifier = ">=0.1.5" },
-    { name = "evosax", specifier = ">=0.1.6" },
     { name = "flax", specifier = ">=0.10.6" },
     { name = "gymnax", git = "https://github.com/smorad/stable-gymnax?rev=main" },
     { name = "jax", marker = "sys_platform == 'darwin'", specifier = ">=0.6.0" },

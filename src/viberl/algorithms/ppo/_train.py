@@ -121,12 +121,6 @@ def _train_step(
     ratio_min = ratio.min()
     ratio_max = ratio.max()
 
-    # jax.experimental.io_callback(
-    #     lambda loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, explained_var, ratio_min, ratio_max: _LOGGER.debug(f"Loss: {loss}, Policy Loss: {pg_loss}, Value Loss: {v_loss}, Entropy: {entropy_loss}, Old Approx KL: {old_approx_kl}, Approx KL: {approx_kl}, Clipfrac: {clipfracs}, Explained Var: {explained_var}, Ratio Min: {ratio_min}, Ratio Max: {ratio_max}"),
-    #     None,
-    #     loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, explained_var, ratio_min, ratio_max
-    # )
-
     state.train_metrics.update( # TODO: Do we need seperate metrics?
         loss=loss,
         policy_loss=pg_loss,
@@ -170,7 +164,7 @@ def batch_update(
 
     # TODO: JAXIFY
     for epoch in range(cfg.num_update_epochs):
-        for mb_start in range(0, batch_size, cfg.num_minibatches):
+        for mb_start in range(0, batch_size, minibatch_size):
             mb_end = mb_start + minibatch_size
 
             mb_idxs = batch_idxs[mb_start : mb_end]
@@ -300,7 +294,7 @@ def train(
             (rollout, next_obs, env_state, global_step, total_rewards, ep_len, key)
         )
 
-        _LOGGER.info(f"[{u}/{num_updates}] Step: {global_step} Total Reward: {total_rewards} Episode Len: {ep_len}")
+        _LOGGER.info(f"[{u}/{num_updates}] Step: {global_step} Mean Total Reward: {total_rewards.mean()} Mean Episode Len: {ep_len.mean()}")
         flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
         _LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
         (pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfrac, ratio) = batch_update(
