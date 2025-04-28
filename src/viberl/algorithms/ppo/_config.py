@@ -1,6 +1,7 @@
-from typing import Optional, Sequence, Callable
+from typing import Callable, Optional, Sequence
 
 import chex
+import flax
 
 @chex.dataclass(unsafe_hash=True, frozen=True)
 class _TrainingSettingConfigSubset:
@@ -44,8 +45,8 @@ class Config:
     target_kl: Optional[float]
     actor_hidden_dims: Sequence[int]
     critic_hidden_dims: Sequence[int]
-    actor_activation_fn: Callable[[chex.Array], chex.Array] | str
-    critic_activation_fn: Callable[[chex.Array], chex.Array] | str
+    actor_activation_fn: Callable[[chex.Array], chex.Array]
+    critic_activation_fn: Callable[[chex.Array], chex.Array]
     actor_lr: float
     critic_lr: float
     actor_max_grad_norm: float
@@ -74,3 +75,10 @@ class Config:
             total_timesteps=self.total_timesteps,
             weight_decay=self.weight_decay
         )
+
+def make_config(**kwargs) -> Config:
+    if "actor_activation_fn" in kwargs and isinstance(kwargs["actor_activation_fn"], str):
+        kwargs["actor_activation_fn"] = getattr(flax.nnx, kwargs["actor_activation_fn"])
+    if "critic_activation_fn" in kwargs and isinstance(kwargs["critic_activation_fn"], str):
+        kwargs["critic_activation_fn"] = getattr(flax.nnx, kwargs["critic_activation_fn"])
+    return Config(**kwargs)

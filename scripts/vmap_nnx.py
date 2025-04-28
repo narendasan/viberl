@@ -2,9 +2,9 @@
 Using nnx.vmap to vectorize models
 """
 
-from flax import nnx
 import jax
 import jax.numpy as jnp
+from flax import nnx
 
 import viberl
 

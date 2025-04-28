@@ -1,19 +1,14 @@
-from typing import Tuple
-
 import logging
-from gymnax.environments import EnvParams
-from gymnax.environments.environment import Environment
+from typing import Callable, Optional, Tuple
+
 import jax
 import jax.numpy as jnp
-from flax import nnx
+from gymnax.environments import EnvParams
+from gymnax.environments.environment import Environment
 
-from viberl.algorithms.ppo._batch_update import batch_update
-from viberl.algorithms._utils import normalize, policy_grad_loss, value_loss, calculate_discounted_sum
-from viberl.algorithms.ppo._rollout import Rollout, flatten_vec_rollout, make_empty_rollout
 from viberl.algorithms.ppo._config import Config
+from viberl.algorithms.ppo._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppo._state import PPOState
-from viberl.models._actor import ActorMLP
-from viberl.models._critic import CriticMLP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -24,6 +19,7 @@ def eval(
     key: jax.random.key,
     *
     collect_values: bool,
+    eval_callback: Optional[Callable[[PPOState, Config, Rollout, bool], None]]
 ) -> Tuple[jax.Array, Rollout]:
 
     total_rewards = jnp.zeros((cfg.num_envs,))
@@ -105,5 +101,8 @@ def eval(
         )
 
         _LOGGER.info(f"Eval: Total Reward: {total_rewards} Episode Len: {ep_len}")
+
+    if eval_callback is not None:
+        eval_callback(state, cfg, rollout, collect_values)
 
     return total_rewards, rollout

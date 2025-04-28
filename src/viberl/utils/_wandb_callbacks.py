@@ -2,10 +2,10 @@ import copy
 from typing import Any, Dict, Tuple
 
 import jax
+import wandb
 from flax import struct
 from rejax.algos import Algorithm
 
-import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 

@@ -1,6 +1,5 @@
-from typing import Optional, Tuple
-
 import logging
+from typing import Optional, Tuple
 
 import jax
 import jax.numpy as jnp

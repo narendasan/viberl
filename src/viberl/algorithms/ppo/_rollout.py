@@ -1,4 +1,4 @@
-from typing import Tuple, Dict
+from typing import Dict, Tuple
 
 import chex
 import jax.numpy as jnp

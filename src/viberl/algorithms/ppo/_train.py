@@ -1,14 +1,25 @@
-from typing import Tuple, Callable, List, Optional
-
 import logging
-from gymnax.environments import EnvParams
-from gymnax.environments.environment import Environment
+from typing import Callable, List, Tuple, Optional
+
 import jax
 import jax.numpy as jnp
 from flax import nnx
-from viberl.algorithms._utils import normalize, policy_grad_loss, value_loss, calculate_discounted_sum
-from viberl.algorithms.ppo._rollout import Rollout, flatten_vec_rollout, make_empty_rollout
+from gymnax.environments import EnvParams
+from gymnax.environments.environment import Environment
+
+from viberl.algorithms._utils import (
+    calculate_discounted_sum,
+    normalize,
+    policy_grad_loss,
+    value_loss,
+)
 from viberl.algorithms.ppo._config import Config, _TrainingSettingConfigSubset
+from viberl.algorithms.ppo._eval import eval
+from viberl.algorithms.ppo._rollout import (
+    Rollout,
+    flatten_vec_rollout,
+    make_empty_rollout,
+)
 from viberl.algorithms.ppo._state import PPOState
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
@@ -19,20 +30,29 @@ train_fn = Callable[[PPOState, Config, Rollout, jax.Array, jax.Array, jax.Array]
 
 returns_fn = Callable[[PPOState, Config, Rollout], Tuple[jax.Array, jax.Array]]
 
+#@nnx.jit
 def _calculate_returns(state: PPOState, cfg: _TrainingSettingConfigSubset, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1]
     next_values = state.critic(last_obs)
     collected_values = rollout.values
 
-    if cfg.normalize_returns:
-        mean, var = state.actor.returns_mean, state.actor.returns_var
-        next_value = (jax.lax.clamp(-5.0, next_values, 5.0) * jnp.sqrt(var)) + mean
-        collected_values = (jax.lax.clamp(-5.0, collected_values, 5.0) * jnp.sqrt(var)) + mean
+    next_values = nnx.cond(
+        cfg.normalize_returns,
+        lambda: (jax.lax.clamp(-5.0, next_values, 5.0) * jnp.sqrt(state.actor.returns_var)) +  state.actor.returns_mean,
+        lambda: next_values
+    )
 
-    if cfg.v_bootstrap:
-        rewards = rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * rollout.values
-    else:
-        rewards = rollout.rewards
+    collected_values = nnx.cond(
+        cfg.normalize_returns,
+        lambda: (jax.lax.clamp(-5.0, collected_values, 5.0) * jnp.sqrt(state.actor.returns_var)) +  state.actor.returns_mean,
+        lambda: collected_values
+    )
+
+    rewards = nnx.cond(
+        cfg.v_bootstrap,
+        lambda: rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * next_values,
+        lambda: rollout.rewards
+    )
 
     _values = jnp.append(collected_values, jnp.expand_dims(next_values, axis=0), axis=0)
 
@@ -43,6 +63,7 @@ def _calculate_returns(state: PPOState, cfg: _TrainingSettingConfigSubset, rollo
 
     return advantages, returns
 
+@nnx.jit
 def _mb_critic_loss(
     critic: CriticMLP,
     cfg: _TrainingSettingConfigSubset,
@@ -54,7 +75,7 @@ def _mb_critic_loss(
     b_obs = rollout.obs[mb_idxs, :]
     b_values = rollout.values[mb_idxs, :]
     b_returns = returns[mb_idxs, :]
-    _LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Value minibatch: {b_values.shape}, Returns minibatch: {b_returns.shape}")
+    #_LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Value minibatch: {b_values.shape}, Returns minibatch: {b_returns.shape}")
 
     values = critic(b_obs)
 
@@ -67,6 +88,7 @@ def _mb_critic_loss(
     return v_loss * cfg.v_coef
 
 
+@nnx.jit
 def _mb_actor_loss(
     actor: ActorMLP,
     cfg: _TrainingSettingConfigSubset,
@@ -80,7 +102,7 @@ def _mb_actor_loss(
     b_actions = rollout.actions[mb_idxs, :]
     b_logprobs = rollout.logprobs[mb_idxs, :]
 
-    _LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Action minibatch: {b_actions.shape}, Logprob minibatch: {b_logprobs.shape}")
+    #_LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Action minibatch: {b_actions.shape}, Logprob minibatch: {b_logprobs.shape}")
 
     logprob, entropy = actor.get_action_log_probs(b_obs, action=b_actions)
 
@@ -161,7 +183,7 @@ def batch_update(
 
     batch_size = rollout.obs.shape[0]
     minibatch_size = batch_size // cfg.num_minibatches
-    _LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
+    #_LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
 
     batch_idxs = jnp.arange(batch_size)
     clipfracs: List[jax.Array] = []
@@ -185,11 +207,11 @@ def batch_update(
     ratio_min = ratio.min()
     ratio_max = ratio.max()
 
-    jax.experimental.io_callback(
-        lambda pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max: _LOGGER.debug(f"Policy Loss: {pg_loss}, Value Loss: {v_loss}, Entropy: {entropy_loss}, Old Approx KL: {old_approx_kl}, Approx KL: {approx_kl}, Clipfrac: {clipfracs}, Ratio Min: {ratio_min}, Ratio Max: {ratio_max}"),
-        None,
-        pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max
-    )
+    # jax.experimental.io_callback(
+    #     lambda pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max: _LOGGER.debug(f"Policy Loss: {pg_loss}, Value Loss: {v_loss}, Entropy: {entropy_loss}, Old Approx KL: {old_approx_kl}, Approx KL: {approx_kl}, Clipfrac: {clipfracs}, Ratio Min: {ratio_min}, Ratio Max: {ratio_max}"),
+    #     None,
+    #     pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max
+    # )
 
     return pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio
 
@@ -199,6 +221,7 @@ def train(
     env_info: Tuple[Environment, EnvParams],
     key: jax.random.key,
     *,
+    eval_callback: Optional[Callable[[PPOState, Config, jax.Array], None]] = None,
     negative_measure_gradients: bool = False
 ):
     training_cfg = cfg.training_config_subset()
@@ -220,7 +243,7 @@ def train(
         next_obs = state.actor.normalize_obs(next_obs)
 
     num_updates = cfg.total_timesteps // (cfg.rollout_len * cfg.num_envs)
-    _LOGGER.info(f"Training for {num_updates} updates")
+    #_LOGGER.info(f"Training for {num_updates} updates")
 
     global_step = 0
     for u in range(1, num_updates + 1):
@@ -232,7 +255,7 @@ def train(
             env.action_space(env_params).shape,
         )
 
-        _LOGGER.debug(f"Rollout: {rollout.shapes}")
+        #_LOGGER.debug(f"Rollout: {rollout.shapes}")
 
         def _rollout_step(
             step: int,
@@ -246,13 +269,13 @@ def train(
             key, action_key, env_step_key = jax.random.split(key, 3)
 
             action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
-            _LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
+            #_LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
 
             _actions = rollout.actions.at[step].set(action)
             _logprobs = rollout.logprobs.at[step].set(logprob)
 
             value = state.critic(next_obs)
-            _LOGGER.debug(f"Value: {value.shape}")
+            #_LOGGER.debug(f"Value: {value.shape}")
 
             _values = rollout.values.at[step].set(value)
 
@@ -273,7 +296,7 @@ def train(
             _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
 
             reward = jnp.expand_dims(reward, axis=-1)
-            _LOGGER.debug(f"Reward: {reward.shape}")
+            #_LOGGER.debug(f"Reward: {reward.shape}")
             reward = jnp.sum(reward, axis=1)
 
             _rewards = rollout.rewards.at[step].set(jnp.expand_dims(reward, axis=-1))
@@ -300,9 +323,13 @@ def train(
             (rollout, next_obs, env_state, global_step, total_rewards, ep_len, key)
         )
 
-        _LOGGER.info(f"[{u}/{num_updates}] Step: {global_step} Total Reward: {total_rewards} Episode Len: {ep_len}")
+        jax.experimental.io_callback(
+            lambda u, num_updates, global_step, total_rewards, ep_len: _LOGGER.info(f"[{u}/{num_updates}] Step: {global_step} Total Reward: {total_rewards} Episode Len: {ep_len}"),
+            None,
+            u, num_updates, global_step, total_rewards, ep_len
+        )
         flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
-        _LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
+        #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
         (pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfrac, ratio) = batch_update(
             state,
             training_cfg,
@@ -310,3 +337,7 @@ def train(
             calculate_returns_fn=_calculate_returns,
             train_step_fn=_train_step
         )
+
+        if eval_callback:
+            if u % cfg.eval_frequency == 0:
+                eval(state, cfg, env, key, collect_values=False, eval_callback=eval_callback)

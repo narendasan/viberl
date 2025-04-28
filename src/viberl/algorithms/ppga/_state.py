@@ -2,7 +2,8 @@ import chex
 from flax import nnx
 
 from viberl.models._actor import VectorizedActor
-from viberl.models._critic import QDCritic, CriticMLP
+from viberl.models._critic import CriticMLP, QDCritic
+
 
 @chex.dataclass
 class VPPOState:

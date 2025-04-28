@@ -1,13 +1,14 @@
-from typing import Tuple, Sequence, Callable, Optional
 import itertools
+from typing import Callable, Optional, Sequence, Tuple
 
+import distrax
 import jax
 import jax.numpy as jnp
-import distrax
 from flax import nnx
 
 from viberl.utils import tree_stack
 from viberl.utils._pytrees import unstack_modules
+
 
 class ActorMLP(nnx.Module):
     def __init__(

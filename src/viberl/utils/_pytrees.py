@@ -1,4 +1,4 @@
-from typing import List, Sequence, Any, Dict, Type, TypeVar
+from typing import Any, Dict, List, Sequence, Type, TypeVar
 
 import jax
 import jax.numpy as jnp

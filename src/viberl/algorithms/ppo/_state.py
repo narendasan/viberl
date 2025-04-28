@@ -1,17 +1,15 @@
+import logging
 from typing import Tuple
 
 import chex
+import optax
 from flax import nnx
 from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
-from jax import numpy as jnp
-from numpy.ma.core import exp
-import optax
-import logging
 
+from viberl.algorithms.ppo._config import Config
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
-from viberl.algorithms.ppo._config import Config
 
 _LOGGER = logging.getLogger(__name__)
 

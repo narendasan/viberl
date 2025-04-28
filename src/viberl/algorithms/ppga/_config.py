@@ -1,7 +1,7 @@
-from typing import Tuple, Optional
+from typing import Optional
 
 import chex
-import jax.numpy as jnp
+
 
 @chex.dataclass
 class Config:

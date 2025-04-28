@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import optax
 from datasets import load_dataset
-
 from flax import nnx
 
 np.random.seed(42)

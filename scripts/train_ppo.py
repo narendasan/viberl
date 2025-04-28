@@ -1,21 +1,14 @@
 import logging
-import os
 
 import flax
 import jax
 from rejax.compat import create
-from viberl.algorithms.ppo import Config, train, make_ppo_state
 
-from viberl.env import render_gymnax
+from viberl.algorithms.ppo import make_config, make_ppo_state, train
 from viberl.utils import (
     argparser,
-    build_eval_callback,
-    create_checkpointer_from_config,
-    create_eval_logger,
-    create_mlflow_logger,
     generate_experiment_config,
     setup_logger,
-    tree_unstack,
 )
 
 parser = argparser()
@@ -40,7 +33,7 @@ agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 
 # Here we create a vector of N agents that we will train seeded with their own key derived from the root key
 env_info = create("brax/walker2d")
-cfg = Config(**config["algorithm"])
+cfg = make_config(**config["algorithm"])
 rngs = flax.nnx.Rngs(root_key)
 ppo_state = make_ppo_state(cfg, env_info, rngs)
 print(ppo_state)

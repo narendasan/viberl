@@ -1,13 +1,18 @@
 from typing import Tuple
 
-from flax import nnx
 import jax
 import jax.numpy as jnp
+from flax import nnx
 
+from viberl.algorithms._utils import (
+    calculate_discounted_sum,
+    normalize,
+    policy_grad_loss,
+    value_loss,
+)
 from viberl.algorithms.ppga._batch_update import batch_update
-from viberl.algorithms._utils import normalize, policy_grad_loss, value_loss, calculate_discounted_sum
-from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppga._config import Config
+from viberl.algorithms.ppga._rollout import Rollout, make_empty_rollout
 from viberl.algorithms.ppga._state import VPPOState
 
 

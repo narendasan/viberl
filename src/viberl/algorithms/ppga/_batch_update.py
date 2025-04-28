@@ -1,11 +1,11 @@
-from typing import Tuple, Callable, List
 import logging
+from typing import Callable, List, Tuple
 
 import jax
 import jax.numpy as jnp
 
-from viberl.algorithms.ppga._rollout import Rollout
 from viberl.algorithms.ppga._config import Config
+from viberl.algorithms.ppga._rollout import Rollout
 from viberl.algorithms.ppga._state import VPPOState
 
 _LOGGER = logging.getLogger(__name__)
