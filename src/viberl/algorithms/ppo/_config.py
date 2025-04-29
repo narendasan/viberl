@@ -53,6 +53,7 @@ class Config:
     critic_max_grad_norm: float
     total_timesteps: int
     weight_decay: float
+    eval_frequency: int
 
     def training_config_subset(self) -> _TrainingSettingConfigSubset:
         return _TrainingSettingConfigSubset(

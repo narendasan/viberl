@@ -16,8 +16,8 @@ def eval(
     state: PPOState,
     cfg: Config,
     env_info: Tuple[Environment, EnvParams],
-    key: jax.random.key,
-    *
+    key: jax.Array,
+    *,
     collect_values: bool,
     eval_callback: Optional[Callable[[PPOState, Config, Rollout, bool], None]]
 ) -> Tuple[jax.Array, Rollout]:
