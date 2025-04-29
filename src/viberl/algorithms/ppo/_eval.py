@@ -48,6 +48,7 @@ def eval(
 
     _LOGGER.debug(f"Rollout: {rollout.shapes}")
 
+    step = 0
     while not jnp.all(dones):
         key, action_key, env_step_key = jax.random.split(key, 3)
 
@@ -65,7 +66,7 @@ def eval(
         else:
             _values = rollout.values
 
-        next_obs, env_state, reward, dones, infos = vmap_step(
+        next_obs, env_state, reward, next_dones, infos = vmap_step(
             jax.random.split(env_step_key, cfg.num_envs),
             env_state,
             action,
@@ -79,6 +80,7 @@ def eval(
             next_obs = state.actor.normalize_obs(next_obs)
 
         _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
+        dones = jnp.logical_or(dones, next_dones)
         _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
 
         reward = jnp.expand_dims(reward, axis=-1)
@@ -87,8 +89,9 @@ def eval(
 
         _rewards = rollout.rewards.at[step].set(jnp.expand_dims(reward, axis=-1))
 
-        total_rewards += reward
-        ep_len += 1
+        total_rewards += reward * jnp.logical_not(dones)
+        ep_len += jnp.logical_not(dones)
+        step += 1
 
         rollout = Rollout(
             obs=_obs,
@@ -100,7 +103,7 @@ def eval(
             values=_values,
         )
 
-        _LOGGER.info(f"Eval: Total Reward: {total_rewards} Episode Len: {ep_len}")
+    _LOGGER.info(f"Eval: Mean Total Reward: {total_rewards.mean()} Episode Len: {ep_len.mean()}")
 
     if eval_callback is not None:
         eval_callback(state, cfg, rollout, collect_values)

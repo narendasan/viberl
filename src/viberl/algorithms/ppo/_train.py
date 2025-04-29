@@ -343,4 +343,4 @@ def train(
             )
 
         if u % cfg.eval_frequency == 0:
-            eval(state, cfg, env, key, collect_values=False, eval_callback=eval_callback)
+            eval(state, cfg, env_info, key, collect_values=False, eval_callback=eval_callback)
