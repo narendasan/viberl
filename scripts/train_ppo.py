@@ -4,12 +4,13 @@ import flax
 import jax
 from rejax.compat import create
 
-from viberl.algorithms.ppo import make_config, make_ppo_state, train
+from viberl.algorithms.ppo import Config, State, train
 from viberl.utils import (
     argparser,
     generate_experiment_config,
     setup_logger,
 )
+from viberl.utils import build_eval_callback, create_eval_logger, create_checkpointer_from_config
 
 parser = argparser()
 args = parser.parse_args()
@@ -33,9 +34,9 @@ agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 
 # Here we create a vector of N agents that we will train seeded with their own key derived from the root key
 env_info = create("brax/walker2d")
-cfg = make_config(**config["algorithm"])
+cfg = Config.from_dict(config["algorithm"])
 rngs = flax.nnx.Rngs(root_key)
-ppo_state = make_ppo_state(cfg, env_info, rngs)
+ppo_state = State.new(cfg, env_info, rngs)
 print(ppo_state)
 # We then insert the callbacks for logging and reporting on training process into each agent
 # These transforms are functional so you get a new agent out instead of modifying in place
@@ -58,7 +59,16 @@ _LOGGER.info("Compiling training function...")
 #vmap_train = jax.jit(jax.vmap(train)).lower(agent_keys).compile()
 
 # _LOGGER.info("Training...")
-train(ppo_state, cfg, env_info, root_key)
+train(
+    ppo_state,
+    cfg,
+    env_info,
+    root_key,
+    eval_callback=build_eval_callback([
+        create_eval_logger(),
+        create_checkpointer_from_config(config),
+    ])
+)
 # print(results)
 # agent_ts = tree_unstack(train_states)
 

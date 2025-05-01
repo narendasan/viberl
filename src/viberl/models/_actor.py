@@ -28,6 +28,7 @@ class ActorMLP(nnx.Module):
         self.obs_shape = obs_shape
         self.action_shape = action_shape
         self.hidden_dims = hidden_dims
+        self.id = jax.random.key_data(rngs())
 
         if isinstance(activation_fn, str):
             activation_fn = getattr(nnx, activation_fn)

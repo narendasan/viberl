@@ -18,6 +18,8 @@ class CriticMLP(nnx.Module):
                  rngs:nnx.Rngs=nnx.Rngs(0)):
         super().__init__()
 
+        self.id = jax.random.key_data(rngs())
+
         if isinstance(activation_fn, str):
             activation_fn = getattr(nnx, activation_fn)
 

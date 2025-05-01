@@ -3,11 +3,14 @@ from typing import Any, Callable, List, Tuple
 
 import jax
 from flax import struct
+from rejax.algos import Algorithm
 
 from viberl.utils._readable_hash import generate_phrase_hash
-from viberl.utils.types import EvalCallback, PolicyEvalResult
+from viberl.utils.types import PolicyEvalResult
 
-_LOGGER = logging.getLogger(__name__)
+EvalCallback = Callable[
+    [Algorithm, struct.PyTreeNode, jax.Array, PolicyEvalResult], Tuple
+]
 
 """
 Creating an evaluation callback. Two examples are available:
@@ -37,9 +40,11 @@ To create your own callback:
 
 The callback will be called during training to evaluate policy performance.
 """
+
+
 def build_eval_callback(
-    fs: List[EvalCallback]
-) -> EvalCallback:
+    algo_instance: Algorithm, fs: List[EvalCallback]
+) -> Callable[[Algorithm, struct.PyTreeNode, jax.Array], Tuple]:
     """Build an evaluation callback from a list of callback functions.
 
     This function combines multiple evaluation callbacks into a single callback function.
@@ -56,16 +61,15 @@ def build_eval_callback(
             - train_state: Current training state
             - key: Random number generator key
     """
+    policy_eval_callback = algo_instance.eval_callback
 
     def eval_callback(
-        state: struct.PyTreeNode,
-        cfg: struct.PyTreeNode,
-        eval_results: PolicyEvalResult,
-        rollout: struct.PyTreeNode,
+        algo: Algorithm, train_state: struct.PyTreeNode, key: jax.Array
     ) -> Tuple[Tuple[Any, ...], ...]:
+        policy_result = PolicyEvalResult(*policy_eval_callback(algo, train_state, key))
         results = []
         for f in fs:
-            results.append(f(state, cfg, eval_results, rollout))
+            results.append(f(algo, train_state, key, policy_result))
         return tuple(results)
 
     return eval_callback
@@ -87,10 +91,10 @@ def create_eval_logger() -> EvalCallback:
     """
 
     def eval_logger(
-        state: struct.PyTreeNode,
-        cfg: struct.PyTreeNode,
+        a: Algorithm,
+        train_state: struct.PyTreeNode,
+        key: jax.Array,
         eval_results: PolicyEvalResult,
-        rollout: struct.PyTreeNode,
     ) -> Tuple:
 
         def log(
@@ -100,6 +104,7 @@ def create_eval_logger() -> EvalCallback:
             mean_length: float,
             id: jax.Array,
         ) -> None:
+            _LOGGER = logging.getLogger(__name__)
             _LOGGER.info(
                 f"[{current_step.item()}/{total_steps}](id: {generate_phrase_hash(id[1])}): mean return: {mean_return} mean length: {mean_length}"
             )
@@ -107,11 +112,11 @@ def create_eval_logger() -> EvalCallback:
         jax.experimental.io_callback(
             log,
             (),
-            state.global_step,
-            cfg.total_timesteps,
+            train_state.global_step,
+            a.total_timesteps,
             eval_results.returns.mean(),
             eval_results.lengths.mean(),
-            state.actor.id,
+            train_state.seed,
         )
         return ()
 

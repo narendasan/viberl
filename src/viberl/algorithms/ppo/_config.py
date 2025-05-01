@@ -1,9 +1,12 @@
-from typing import Callable, Optional, Sequence
+from typing import Callable, Optional, Sequence, Self, Dict, Any
 
-import chex
+import copy
+import jax
 import flax
+from flax import nnx
+from flax import struct
 
-@chex.dataclass(unsafe_hash=True, frozen=True)
+@struct.dataclass
 class _TrainingSettingConfigSubset:
     normalize_obs: bool
     normalize_returns: bool
@@ -25,7 +28,7 @@ class _TrainingSettingConfigSubset:
     weight_decay: float
 
 
-@chex.dataclass(unsafe_hash=True, frozen=True)
+@struct.dataclass
 class Config:
     normalize_obs: bool
     normalize_returns: bool
@@ -45,8 +48,8 @@ class Config:
     target_kl: Optional[float]
     actor_hidden_dims: Sequence[int]
     critic_hidden_dims: Sequence[int]
-    actor_activation_fn: Callable[[chex.Array], chex.Array]
-    critic_activation_fn: Callable[[chex.Array], chex.Array]
+    actor_activation_fn: Callable[[jax.Array], jax.Array]
+    critic_activation_fn: Callable[[jax.Array], jax.Array]
     actor_lr: float
     critic_lr: float
     actor_max_grad_norm: float
@@ -77,9 +80,11 @@ class Config:
             weight_decay=self.weight_decay
         )
 
-def make_config(**kwargs) -> Config:
-    if "actor_activation_fn" in kwargs and isinstance(kwargs["actor_activation_fn"], str):
-        kwargs["actor_activation_fn"] = getattr(flax.nnx, kwargs["actor_activation_fn"])
-    if "critic_activation_fn" in kwargs and isinstance(kwargs["critic_activation_fn"], str):
-        kwargs["critic_activation_fn"] = getattr(flax.nnx, kwargs["critic_activation_fn"])
-    return Config(**kwargs)
+    @classmethod
+    def from_dict(cls: Self, kwargs: Dict[str, Any]) -> Self:
+        kwargs = copy.deepcopy(kwargs)
+        if "actor_activation_fn" in kwargs and isinstance(kwargs["actor_activation_fn"], str):
+            kwargs["actor_activation_fn"] = getattr(nnx, kwargs["actor_activation_fn"])
+        if "critic_activation_fn" in kwargs and isinstance(kwargs["critic_activation_fn"], str):
+            kwargs["critic_activation_fn"] = getattr(nnx, kwargs["critic_activation_fn"])
+        return cls(**kwargs)

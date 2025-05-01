@@ -20,17 +20,18 @@ from viberl.algorithms.ppo._rollout import (
     flatten_vec_rollout,
     make_empty_rollout,
 )
-from viberl.algorithms.ppo._state import PPOState
+from viberl.algorithms.ppo._state import State
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
+from viberl.utils.types import EvalCallback
 
 _LOGGER = logging.getLogger(__name__)
 
-train_fn = Callable[[PPOState, _TrainingSettingConfigSubset, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array, jax.Array]]
+train_fn = Callable[[State, _TrainingSettingConfigSubset, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array, jax.Array]]
 
-returns_fn = Callable[[PPOState, _TrainingSettingConfigSubset, Rollout], Tuple[jax.Array, jax.Array]]
+returns_fn = Callable[[State, _TrainingSettingConfigSubset, Rollout], Tuple[jax.Array, jax.Array]]
 
-def _calculate_returns(state: PPOState, cfg: _TrainingSettingConfigSubset, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
+def _calculate_returns(state: State, cfg: _TrainingSettingConfigSubset, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1]
     next_values = state.critic(last_obs)
     collected_values = rollout.values
@@ -125,7 +126,7 @@ def _mb_actor_loss(
 
 @nnx.jit
 def _train_step(
-    state: PPOState,
+    state: State,
     cfg: _TrainingSettingConfigSubset,
     rollout: Rollout,
     advantages: jax.Array,
@@ -168,7 +169,7 @@ def _train_step(
     return loss, pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio
 
 def batch_update(
-    state: PPOState,
+    state: State,
     cfg: _TrainingSettingConfigSubset,
     rollout: Rollout,
     *,
@@ -216,12 +217,12 @@ def batch_update(
 
 
 def train(
-    state: PPOState,
+    state: State,
     cfg: Config,
     env_info: Tuple[Environment, EnvParams],
     key: jax.random.key,
     *,
-    eval_callback: Optional[Callable[[PPOState, Config, jax.Array], None]] = None,
+    eval_callback: Optional[EvalCallback] = None,
     negative_measure_gradients: bool = False
 ):
     training_cfg = cfg.training_config_subset()
@@ -245,7 +246,7 @@ def train(
     num_updates = cfg.total_timesteps // (cfg.rollout_len * cfg.num_envs)
     #_LOGGER.info(f"Training for {num_updates} updates")
 
-    global_step = 0
+    state.global_step = 0
     for u in range(1, num_updates + 1):
 
         with jax.profiler.TraceAnnotation("collect_rollout"):
@@ -261,10 +262,10 @@ def train(
             @nnx.jit
             def _rollout_step(
                 step: int,
-                carry: Tuple[Rollout, jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]
-            ) -> Tuple[Rollout, jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]:
-                (rollout, next_obs, env_state, global_step, total_rewards, ep_len, key) = carry
-                global_step += cfg.num_envs
+                carry: Tuple[Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
+            ) -> Tuple[Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+                (rollout, next_obs, env_state, total_rewards, ep_len, key) = carry
+                state.global_step += cfg.num_envs
 
                 _obs = rollout.obs.at[step].set(next_obs)
 
@@ -316,20 +317,15 @@ def train(
                     values=_values,
                 )
 
-                return rollout, next_obs, env_state, global_step, total_rewards, ep_len, key
+                return rollout, next_obs, env_state, total_rewards, ep_len, key
 
-            (rollout, next_obs, env_state, global_step, total_rewards, ep_len, key) = jax.lax.fori_loop(
+            (rollout, next_obs, env_state, total_rewards, ep_len, key) = jax.lax.fori_loop(
                 0,
                 cfg.rollout_len,
                 _rollout_step,
-                (rollout, next_obs, env_state, global_step, total_rewards, ep_len, key)
+                (rollout, next_obs, env_state, total_rewards, ep_len, key)
             )
 
-        jax.experimental.io_callback(
-            lambda u, num_updates, global_step, total_rewards, ep_len: _LOGGER.info(f"[{u}/{num_updates}] Step: {global_step} Total Reward: {total_rewards} Episode Len: {ep_len}"),
-            None,
-            u, num_updates, global_step, total_rewards, ep_len
-        )
         flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
         #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
 
@@ -343,4 +339,6 @@ def train(
             )
 
         if u % cfg.eval_frequency == 0:
-            eval(state, cfg, env_info, key, collect_values=False, eval_callback=eval_callback)
+            eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
+            if eval_callback:
+                eval_callback(state, cfg, eval_result, eval_rollout)

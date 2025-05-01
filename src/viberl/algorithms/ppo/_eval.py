@@ -6,21 +6,22 @@ import jax.numpy as jnp
 from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
 
+
+from viberl.utils.types import PolicyEvalResult
 from viberl.algorithms.ppo._config import Config
 from viberl.algorithms.ppo._rollout import Rollout, make_empty_rollout
-from viberl.algorithms.ppo._state import PPOState
+from viberl.algorithms.ppo._state import State
 
 _LOGGER = logging.getLogger(__name__)
 
 def eval(
-    state: PPOState,
+    state: State,
     cfg: Config,
     env_info: Tuple[Environment, EnvParams],
     key: jax.Array,
     *,
     collect_values: bool,
-    eval_callback: Optional[Callable[[PPOState, Config, Rollout, bool], None]]
-) -> Tuple[jax.Array, Rollout]:
+) -> Tuple[PolicyEvalResult, Rollout]:
 
     total_rewards = jnp.zeros((cfg.num_envs,))
     ep_len = jnp.zeros((cfg.num_envs,))
@@ -103,9 +104,4 @@ def eval(
             values=_values,
         )
 
-    _LOGGER.info(f"Eval: Mean Total Reward: {total_rewards.mean()} Episode Len: {ep_len.mean()}")
-
-    if eval_callback is not None:
-        eval_callback(state, cfg, rollout, collect_values)
-
-    return total_rewards, rollout
+    return PolicyEvalResult(ep_len, total_rewards), rollout
