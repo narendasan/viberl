@@ -293,7 +293,8 @@ def train(
                     next_obs = jnp.expand_dims(next_obs, axis=0)
 
                 if cfg.normalize_obs:
-                    next_obs = state.actor.normalize_obs(next_obs)
+                    # Need this indirection so that state can be mutated in ActorMLP
+                    next_obs = nnx.jit(state.actor.normalize_obs)(next_obs)
 
                 _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
                 _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))

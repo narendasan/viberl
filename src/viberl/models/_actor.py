@@ -51,13 +51,13 @@ class ActorMLP(nnx.Module):
 
         self.action_logstd = nnx.Param(jnp.zeros((1, jnp.array(action_shape).prod().item())))
 
-        self.obs_mean = nnx.Param(jnp.ones(self.obs_shape))
-        self.obs_var = nnx.Param(jnp.ones(self.obs_shape))
-        self.obs_count = nnx.Param(jnp.ones((1,)))
-        self.returns_mean = nnx.Param(jnp.ones(1,))
-        self.returns_var = nnx.Param(jnp.ones((1,)))
-        self.returns_count = nnx.Param(jnp.ones((1,)))
-        self.normalize_eps = nnx.Param(jnp.ones((1,)))
+        self.obs_mean = nnx.Variable(jnp.ones(self.obs_shape), )
+        self.obs_var = nnx.Variable(jnp.ones(self.obs_shape))
+        self.obs_count = nnx.Variable(jnp.ones((1,)))
+        self.returns_mean = nnx.Variable(jnp.ones(1,))
+        self.returns_var = nnx.Variable(jnp.ones((1,)))
+        self.returns_count = nnx.Variable(jnp.ones((1,)))
+        self.normalize_eps = nnx.Variable(jnp.ones((1,)))
 
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self.action_mean(obs)
@@ -90,7 +90,6 @@ class ActorMLP(nnx.Module):
         return jnp.expand_dims(dist.log_prob(action).sum(axis=1), axis=-1), dist.entropy()
 
     @staticmethod
-    @jax.jit
     def _update_running_stats(
         batch: jax.Array,
         mean: jax.Array,
