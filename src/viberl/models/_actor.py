@@ -57,7 +57,7 @@ class ActorMLP(nnx.Module):
         self.returns_mean = nnx.Variable(jnp.ones(1,))
         self.returns_var = nnx.Variable(jnp.ones((1,)))
         self.returns_count = nnx.Variable(jnp.ones((1,)))
-        self.normalize_eps = nnx.Variable(jnp.ones((1,)))
+        self.normalize_eps = normalize_epsilon
 
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self.action_mean(obs)

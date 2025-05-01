@@ -262,9 +262,9 @@ def train(
             @nnx.jit
             def _rollout_step(
                 step: int,
-                carry: Tuple[Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
-            ) -> Tuple[Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-                (rollout, next_obs, env_state, total_rewards, ep_len, key) = carry
+                carry: Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
+            ) -> Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+                (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = carry
                 state.global_step += cfg.num_envs
 
                 _obs = rollout.obs.at[step].set(next_obs)
@@ -294,7 +294,7 @@ def train(
 
                 if cfg.normalize_obs:
                     # Need this indirection so that state can be mutated in ActorMLP
-                    next_obs = nnx.jit(state.actor.normalize_obs)(next_obs)
+                    next_obs = state.actor.normalize_obs(next_obs)
 
                 _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
                 _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
@@ -318,13 +318,13 @@ def train(
                     values=_values,
                 )
 
-                return rollout, next_obs, env_state, total_rewards, ep_len, key
+                return state, rollout, next_obs, env_state, total_rewards, ep_len, key
 
-            (rollout, next_obs, env_state, total_rewards, ep_len, key) = jax.lax.fori_loop(
+            (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
                 0,
                 cfg.rollout_len,
                 _rollout_step,
-                (rollout, next_obs, env_state, total_rewards, ep_len, key)
+                (state, rollout, next_obs, env_state, total_rewards, ep_len, key)
             )
 
         flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
