@@ -10,7 +10,7 @@ from viberl.utils import (
     generate_experiment_config,
     setup_logger,
 )
-from viberl.utils import build_eval_callback, create_eval_logger, create_checkpointer_from_config
+from viberl.utils import build_eval_callback, create_eval_logger, create_checkpointer_from_config, create_wandb_logger
 
 parser = argparser()
 args = parser.parse_args()
@@ -67,6 +67,7 @@ train(
     eval_callback=build_eval_callback([
         create_eval_logger(),
         create_checkpointer_from_config(config),
+        create_wandb_logger(config),
     ])
 )
 # print(results)

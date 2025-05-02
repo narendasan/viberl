@@ -2,10 +2,10 @@ import copy
 from typing import Any, Dict, Tuple
 
 import jax
-import wandb
 from flax import struct
 from rejax.algos import Algorithm
 
+import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 
@@ -28,14 +28,14 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     config = copy.deepcopy(config)
 
     def wandb_logger(
-        a: Algorithm,
-        train_state: struct.PyTreeNode,
-        key: jax.Array,
+        state: struct.PyTreeNode,
+        cfg: struct.PyTreeNode,
         eval_results: PolicyEvalResult,
+        rollout: struct.PyTreeNode,
     ) -> Tuple:
         def log(id: jax.Array, step: jax.Array, data: Dict[str, float]) -> None:
             wandb.init(  # type: ignore
-                project="rl-sandbox",
+                project="viberl",
                 group=config["experiment"]["experiment_name"],
                 tags=config["experiment"]["tags"],
                 config=config,
@@ -49,15 +49,17 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
             wandb.log(data, step=step)  # type: ignore
             wandb.finish()  # type: ignore
 
+        train_metrics = state.train_metrics.compute()
+        eval_metrics = state.eval_metrics.compute()
+
+        metrics = {f"training/{key}": value for key, value in train_metrics.items()} | {f"eval/{key}": value for key, value in eval_metrics.items()}
+
         jax.experimental.io_callback(
             log,
             (),  # result_shape_dtypes (wandb.log returns None)
-            copy.deepcopy(train_state.seed),
-            train_state.global_step,
-            {
-                "mean_episode_length": eval_results.lengths.mean(),
-                "mean_return": eval_results.returns.mean(),
-            },
+            copy.deepcopy(state.actor.id),
+            state.global_step,
+            metrics,
         )
 
         # Since we log to wandb, we don't want to return anything that is collected

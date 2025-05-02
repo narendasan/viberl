@@ -21,6 +21,7 @@ class State:
     actor: ActorMLP
     critic: CriticMLP
     train_metrics: nnx.MultiMetric
+    eval_metrics: nnx.MultiMetric
     actor_optimizer: nnx.Optimizer
     critic_optimizer: nnx.Optimizer
     global_step: int = 0
@@ -88,6 +89,11 @@ class State:
             ratio_max=nnx.metrics.Average("ratio_max")
         )
 
+        eval_metrics = nnx.MultiMetric(
+            reward=nnx.metrics.Average("reward"),
+            ep_len=nnx.metrics.Average("ep_len"),
+        )
+
         actor_optimizer = nnx.Optimizer(
             actor, optax.chain(
                 optax.clip_by_global_norm(max_norm=cfg.actor_max_grad_norm),
@@ -105,12 +111,13 @@ class State:
             actor=actor,
             critic=critic,
             train_metrics=train_metrics,
+            eval_metrics=eval_metrics,
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
         )
 
     @classmethod
-    def from_env(cls: Self, cfg: Config, *, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> Self:
+    def from_env(cls, cfg: Config, *, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> Self:
         return cls.from_shape(cfg, obs_shape=env_info[0].observation_space(env_info[1]).shape, action_shape=env_info[0].action_space(env_info[1]).shape, rngs=rngs)
 
     def policy_fn(self) -> Callable[[jax.Array, jax.Array], jax.Array]:

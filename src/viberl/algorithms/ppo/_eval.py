@@ -103,5 +103,9 @@ def eval(
             truncated=_truncated,
             values=_values,
         )
+    state.eval_metrics.update(
+        rewards=total_rewards,
+        ep_len=ep_len,
+    )
 
     return PolicyEvalResult(ep_len, total_rewards), rollout
