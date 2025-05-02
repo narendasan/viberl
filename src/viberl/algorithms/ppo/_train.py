@@ -207,11 +207,11 @@ def batch_update(
     ratio_min = ratio.min()
     ratio_max = ratio.max()
 
-    # jax.experimental.io_callback(
-    #     lambda pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max: _LOGGER.debug(f"Policy Loss: {pg_loss}, Value Loss: {v_loss}, Entropy: {entropy_loss}, Old Approx KL: {old_approx_kl}, Approx KL: {approx_kl}, Clipfrac: {clipfracs}, Ratio Min: {ratio_min}, Ratio Max: {ratio_max}"),
-    #     None,
-    #     pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max
-    # )
+    jax.experimental.io_callback(
+        lambda pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max: _LOGGER.info(f"Policy Loss: {pg_loss}, Value Loss: {v_loss}, Entropy: {entropy_loss}, Old Approx KL: {old_approx_kl}, Approx KL: {approx_kl}, Ratio Min: {ratio_min}, Ratio Max: {ratio_max}"),
+        None,
+        pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio_min, ratio_max
+    )
 
     return pg_loss, v_loss, entropy_loss, old_approx_kl, approx_kl, clipfracs, ratio
 

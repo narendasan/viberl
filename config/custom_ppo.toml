@@ -36,5 +36,5 @@ v_bootstrap = false
 weight_decay = 0.0
 rollout_len = 128
 total_timesteps = 1_000_000
-num_envs = 10
+num_envs = 128
 eval_frequency = 2
