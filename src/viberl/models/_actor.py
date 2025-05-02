@@ -13,8 +13,8 @@ from viberl.utils._pytrees import unstack_modules
 class ActorMLP(nnx.Module):
     def __init__(
         self,
-        obs_shape: Tuple[int],
-        action_shape: Tuple[int],
+        obs_shape: Tuple[int, ...],
+        action_shape: Tuple[int, ...],
         *,
         hidden_dims: Sequence[int] = [128, 128],
         activation_fn: Callable | str = nnx.tanh,

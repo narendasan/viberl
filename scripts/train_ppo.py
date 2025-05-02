@@ -36,7 +36,7 @@ agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 env_info = create("brax/walker2d")
 cfg = Config.from_dict(config["algorithm"])
 rngs = flax.nnx.Rngs(root_key)
-ppo_state = State.new(cfg, env_info, rngs)
+ppo_state = State.from_env(cfg, env_info=env_info, rngs=rngs)
 print(ppo_state)
 # We then insert the callbacks for logging and reporting on training process into each agent
 # These transforms are functional so you get a new agent out instead of modifying in place

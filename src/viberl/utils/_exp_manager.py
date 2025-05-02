@@ -42,8 +42,8 @@ def argparser() -> argparse.ArgumentParser:
 
 
 def argparser_for_eval() -> argparse.ArgumentParser:
-    parser = argparser()
+    parser = argparse.ArgumentParser()
     parser.add_argument("--seed-name", type=str)
-    parser.add_argument("--experiment", type=str)
+    parser.add_argument("--experiment-path", type=str)
     parser.add_argument("--step", type=str, default="best")
     return parser

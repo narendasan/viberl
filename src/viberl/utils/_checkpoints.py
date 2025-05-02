@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
+import jax.numpy as jnp
 import orbax.checkpoint as ocp
 import tomli_w
 from flax import struct
@@ -29,8 +30,7 @@ def generate_checkpointer_options(
 
 def load_ckpt(
     state: struct.PyTreeNode,
-    ckpt_dir: str,
-    experiment_name: str,
+    experiment_path: str,
     *,
     run_name: Optional[str] = None,
     step: str | int = "best",
@@ -54,31 +54,38 @@ def load_ckpt(
     else:
         phrase_hash = generate_phrase_hash(state.actor.id[1])
 
-    if not ckpt_dir.startswith("/"):
-        ckpt_dir_path = Path(os.getcwd()) / ckpt_dir
+    if not experiment_path.startswith("/"):
+        ckpt_dir_path = Path(os.getcwd()) / experiment_path
     else:
-        ckpt_dir_path = Path(ckpt_dir)
+        ckpt_dir_path = Path(experiment_path)
 
     ts = state._generate_checkpoint()
-    with jax.default_device(jax.devices("gpu")[0] if platform.system().lower() == "linux" else jax.devices("cpu")[0]):
+    ts = jax.tree_util.tree_map(jnp.zeros_like, ts)
+    abstract_ts = jax.tree_util.tree_map(
+        ocp.utils.to_shape_dtype_struct, ts
+    )
+    flat_ts, treedef = jax.tree_util.tree_flatten(abstract_ts)
+    restore_args = ocp.args.StandardRestore(flat_ts)
+    with jax.default_device(jax.devices("gpu")[0] if jax.default_backend() == 'gpu' else jax.devices("cpu")[0]):
         with ocp.CheckpointManager(
-            ckpt_dir_path / experiment_name / phrase_hash, options=options
+            ckpt_dir_path / phrase_hash,
+            options=options
         ) as ocp_checkpointer:
             if step == "best":
                 train_state = ocp_checkpointer.restore(
-                    ocp_checkpointer.best_step(), args=ocp.args.StandardRestore(ts)
+                    ocp_checkpointer.best_step(), args=restore_args
                 )
             elif step == "latest":
                 train_state = ocp_checkpointer.restore(
-                    ocp_checkpointer.latest_step(), args=ocp.args.StandardRestore(ts)
+                    ocp_checkpointer.latest_step(), args=restore_args
                 )
             elif isinstance(step, int):
                 train_state = ocp_checkpointer.restore(
-                    step, args=ocp.args.StandardRestore(ts)
+                    step, args=restore_args
                 )
             elif isinstance(step, str) and step.isdigit():
                 train_state = ocp_checkpointer.restore(
-                    int(step), args=ocp.args.StandardRestore(ts)
+                    int(step), args=restore_args
                 )
             else:
                 raise ValueError(
@@ -87,7 +94,7 @@ def load_ckpt(
 
         _LOGGER.info(f"Loaded checkpoint {step} for {phrase_hash}: {train_state}")
 
-    return train_state
+    return jax.tree_util.tree_unflatten(treedef, train_state)
 
 
 def create_checkpointer(
@@ -138,7 +145,7 @@ def create_checkpointer(
             ) as ocp_checkpointer:
                 ocp_checkpointer.save(
                     current_step,
-                    args=ocp.args.StandardSave(t),
+                    args=ocp.args.StandardSave(jax.tree_util.tree_flatten(t)[0]),
                     metrics={
                         "mean_returns": e.returns.mean().item(),
                         "mean_lengths": e.lengths.mean().item(),

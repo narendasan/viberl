@@ -11,7 +11,7 @@ from viberl.utils._pytrees import unstack_modules
 
 class CriticMLP(nnx.Module):
     def __init__(self,
-                 obs_shape: Tuple[int],
+                 obs_shape: Tuple[int, ...],
                  *,
                  hidden_dims: Sequence[int] = [256, 265],
                  activation_fn: Callable | str = nnx.tanh,

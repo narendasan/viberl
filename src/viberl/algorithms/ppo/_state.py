@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Dict, Any, Self, Callable
+from typing import Tuple, Dict, Any, Self, Callable, overload
 
 from jax import numpy as jnp
 import jax
@@ -55,10 +55,10 @@ class State:
         self.global_step = ckpt["global_step"]
 
     @classmethod
-    def new(cls: Self, cfg: Config, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> Self:
+    def from_shape(cls, cfg: Config, *, obs_shape: Tuple[int, ...], action_shape: Tuple[int, ...], rngs: nnx.Rngs) -> Self:
         actor = ActorMLP(
-            env_info[0].observation_space(env_info[1]).shape,
-            env_info[0].action_space(env_info[1]).shape,
+            obs_shape,
+            action_shape,
             hidden_dims=cfg.actor_hidden_dims,
             activation_fn=cfg.actor_activation_fn,
             normalize_obs=cfg.normalize_obs,
@@ -68,7 +68,7 @@ class State:
         _LOGGER.info(f"Actor network {actor}")
 
         critic = CriticMLP(
-            env_info[0].observation_space(env_info[1]).shape,
+            obs_shape,
             hidden_dims=cfg.critic_hidden_dims,
             activation_fn=cfg.critic_activation_fn,
             rngs=rngs
@@ -108,6 +108,10 @@ class State:
             actor_optimizer=actor_optimizer,
             critic_optimizer=critic_optimizer,
         )
+
+    @classmethod
+    def from_env(cls: Self, cfg: Config, *, env_info: Tuple[Environment, EnvParams], rngs: nnx.Rngs) -> Self:
+        return cls.from_shape(cfg, obs_shape=env_info[0].observation_space(env_info[1]).shape, action_shape=env_info[0].action_space(env_info[1]).shape, rngs=rngs)
 
     def policy_fn(self) -> Callable[[jax.Array, jax.Array], jax.Array]:
         def _policy(obs: jax.Array, key: jax.Array) -> jax.Array:
