@@ -217,7 +217,6 @@ def train(
     key: jax.random.key,
     *,
     eval_callback: Optional[EvalCallback] = None,
-    negative_measure_gradients: bool = False
 ):
     training_cfg = cfg.training_config_subset()
 

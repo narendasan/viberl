@@ -104,7 +104,7 @@ def eval(
             values=_values,
         )
     state.eval_metrics.update(
-        rewards=total_rewards,
+        reward=total_rewards,
         ep_len=ep_len,
     )
 
