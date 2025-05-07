@@ -81,12 +81,11 @@ class State:
             policy_loss=nnx.metrics.Average("policy_loss"),
             value_loss=nnx.metrics.Average("value_loss"),
             entropy=nnx.metrics.Average("entropy"),
-            old_approx_kl=nnx.metrics.Average("old_approx_kl"),
             approx_kl=nnx.metrics.Average("approx_kl"),
             clipfrac=nnx.metrics.Average("clipfrac"),
             explained_var=nnx.metrics.Average("explained_var"),
             ratio_min=nnx.metrics.Average("ratio_min"),
-            ratio_max=nnx.metrics.Average("ratio_max")
+            ratio_max=nnx.metrics.Average("ratio_max"),
         )
 
         eval_metrics = nnx.MultiMetric(

@@ -87,9 +87,11 @@ class ActorMLP(nnx.Module):
         action_logstd = jnp.broadcast_to(self.action_logstd.value, action_mean.shape)
         action_std = jnp.exp(action_logstd)
         dist = distrax.Normal(action_mean, action_std)
+
         return jnp.expand_dims(dist.log_prob(action).sum(axis=1), axis=-1), dist.entropy()
 
     @staticmethod
+    @jax.jit
     def _update_running_stats(
         batch: jax.Array,
         mean: jax.Array,
@@ -112,14 +114,14 @@ class ActorMLP(nnx.Module):
         return new_mean, new_var, new_count
 
     def normalize_obs(self, batch: jax.Array) -> jax.Array:
-        self.obs_mean, self.obs_var, self.obs_count = ActorMLP._update_running_stats(
-            batch, self.obs_mean, self.obs_var, self.obs_count
+        self.obs_mean.value, self.obs_var.value, self.obs_count.value = ActorMLP._update_running_stats(
+            batch, self.obs_mean.value, self.obs_var.value, self.obs_count.value
         )
         return (batch - self.obs_mean) / jnp.sqrt(self.obs_var + self.normalize_eps)
 
     def normalize_returns(self, batch: jax.Array) -> jax.Array:
-        self.returns_mean, self.returns_var, self.returns_count = ActorMLP._update_running_stats(
-            batch, self.returns_mean, self.returns_var, self.returns_count
+        self.returns_mean.value, self.returns_var.value, self.returns_count.value = ActorMLP._update_running_stats(
+            batch, self.returns_mean.value, self.returns_var.value, self.returns_count.value
         )
         return jax.lax.clamp(-5.0, (batch - self.returns_mean) / jnp.sqrt(self.returns_var + self.normalize_eps), 5.0)
 

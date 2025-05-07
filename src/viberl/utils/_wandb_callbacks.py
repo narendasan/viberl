@@ -9,6 +9,7 @@ import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 
+_WANDB_INSTANCES = []
 
 def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """Create a callback for logging to Weights & Biases.
@@ -27,6 +28,7 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """
     config = copy.deepcopy(config)
 
+
     def wandb_logger(
         state: struct.PyTreeNode,
         cfg: struct.PyTreeNode,
@@ -34,20 +36,23 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
         rollout: struct.PyTreeNode,
     ) -> Tuple:
         def log(id: jax.Array, step: jax.Array, data: Dict[str, float]) -> None:
-            wandb.init(  # type: ignore
-                project="viberl",
-                group=config["experiment"]["experiment_name"],
-                tags=config["experiment"]["tags"],
-                config=config,
-                resume="allow",
-                reinit=True,
-                id=f"{generate_phrase_hash(id[1])}-{config['experiment']['experiment_name']}",
-            )
+            phrase_id = generate_phrase_hash(id[1])
+            if phrase_id not in _WANDB_INSTANCES:
+                run = wandb.init(  # type: ignore
+                    project="viberl",
+                    group=config["experiment"]["experiment_name"],
+                    tags=config["experiment"]["tags"],
+                    config=config,
+                    resume="allow",
+                    reinit=True,
+                    id=f"{phrase_id }-{config['experiment']['experiment_name']}",
+                )
+            else:
+                run = _WANDB_INSTANCES[phrase_id]
             # io_callback returns np.array, which wandb does not like.
             # In jax 0.4.27, this becomes a jax array, should check when upgrading...
             step = step.item()
-            wandb.log(data, step=step)  # type: ignore
-            wandb.finish()  # type: ignore
+            run.log(data, step=step)  # type: ignore
 
         train_metrics = state.train_metrics.compute()
         eval_metrics = state.eval_metrics.compute()

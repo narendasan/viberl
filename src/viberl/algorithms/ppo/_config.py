@@ -7,7 +7,7 @@ from flax import nnx
 from flax import struct
 
 @struct.dataclass
-class _TrainingSettingConfigSubset:
+class _TrainingConfig:
     normalize_obs: bool
     normalize_returns: bool
     normalize_advantages: bool
@@ -58,8 +58,8 @@ class Config:
     weight_decay: float
     eval_frequency: int
 
-    def training_config_subset(self) -> _TrainingSettingConfigSubset:
-        return _TrainingSettingConfigSubset(
+    def training_config_subset(self) -> _TrainingConfig:
+        return _TrainingConfig(
             normalize_obs=self.normalize_obs,
             normalize_returns=self.normalize_returns,
             normalize_advantages=self.normalize_advantages,
