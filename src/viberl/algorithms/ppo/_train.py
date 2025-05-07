@@ -27,7 +27,7 @@ from viberl.utils.types import EvalCallback
 
 _LOGGER = logging.getLogger(__name__)
 
-train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array]]
+train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array], Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array]]
 
 returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Array]]
 
@@ -124,7 +124,7 @@ def _mb_actor_loss(
     return loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)
 
 
-@nnx.scan(in_axes=(None, None, None, None, None, 0), out_axes=(0, 0, 0, 0, 0, 0, 0))
+@nnx.scan(in_axes=(nnx.Carry, None, None, None, None, 0), out_axes=(nnx.Carry, 0, 0, 0, 0, 0, 0, 0))
 def _train_epoch(
     state: State,
     cfg: _TrainingConfig,
@@ -132,7 +132,7 @@ def _train_epoch(
     advantages: jax.Array,
     returns: jax.Array,
     mb_idxs: jax.Array
-) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
     """
     Scans over mb_idxs to train a full epoch per call
     """
@@ -168,7 +168,7 @@ def _train_epoch(
     # Grad clipping is part of the optimizer
     state.critic_optimizer.update(critic_grads)
 
-    return loss, pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio
+    return state, loss, pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio
 
 @nnx.scan(in_axes=(None, 0), out_axes=(0))
 def _normalize_returns_by_step(state: State, returns: jax.Array) -> jax.Array:
@@ -182,14 +182,14 @@ def batch_update(
     *,
     calculate_returns_fn: returns_fn,
     train_step_fn: train_fn
-) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
 
     @nnx.jit(static_argnums=(1,))
     def _batch_update(
         state: State,
         cfg: _TrainingConfig,
         rollout: Rollout
-    ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    ) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         advantages, returns = calculate_returns_fn(state, cfg, rollout)
 
         normed_returns = _normalize_returns_by_step(state, returns)
@@ -216,7 +216,7 @@ def batch_update(
             carry: Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]
         ) -> Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array,jax.Array, jax.Array]]:
             state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio) = carry
-            _, _pg_loss, _v_loss, _entropy_loss, _approx_kl, _clipfracs, _ratio = train_step_fn(state, cfg, rollout, advantages, returns, mb_idxs)
+            state, _, _pg_loss, _v_loss, _entropy_loss, _approx_kl, _clipfracs, _ratio = train_step_fn(state, cfg, rollout, advantages, returns, mb_idxs)
             pg_loss = pg_loss.at[e].set(_pg_loss)
             v_loss = v_loss.at[e].set(_v_loss)
             entropy_loss = entropy_loss.at[e].set(_entropy_loss)
@@ -236,7 +236,7 @@ def batch_update(
         ratio_min = ratio[-1][-1].min()
         ratio_max = ratio[-1][-1].max()
 
-        return pg_loss[-1][-1], v_loss[-1][-1], entropy_loss[-1][-1], approx_kl[-1][-1], clipfracs[-1], ratio[-1][-1]
+        return state, pg_loss[-1][-1], v_loss[-1][-1], entropy_loss[-1][-1], approx_kl[-1][-1], clipfracs[-1], ratio[-1][-1]
     return _batch_update(state, cfg, rollout)
 
 
@@ -354,7 +354,7 @@ def train(
         #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
 
         with jax.profiler.TraceAnnotation("training_loop"):
-            (pg_loss, v_loss, entropy_loss, approx_kl, clipfrac, ratio) = batch_update(
+            (state, pg_loss, v_loss, entropy_loss, approx_kl, clipfrac, ratio) = batch_update(
                 state,
                 training_cfg,
                 flattened_rollout,

@@ -21,7 +21,7 @@ dependencies = [
 license = "NCSA"
 
 [project.optional-dependencies]
-wandb = ["wandb>=0.19.6"]
+wandb = ["wandb>=0.19.10"]
 mlflow = ["mlflow>=2.20.2"]
 
 [dependency-groups]

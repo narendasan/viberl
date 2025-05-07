@@ -3,7 +3,6 @@ from typing import Any, Dict, Tuple
 
 import jax
 from flax import struct
-from rejax.algos import Algorithm
 
 import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
@@ -44,8 +43,8 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
                     tags=config["experiment"]["tags"],
                     config=config,
                     resume="allow",
-                    reinit=True,
-                    id=f"{phrase_id }-{config['experiment']['experiment_name']}",
+                    reinit="create_new",
+                    id=f"{phrase_id}-{config['experiment']['experiment_name']}",
                 )
             else:
                 run = _WANDB_INSTANCES[phrase_id]
