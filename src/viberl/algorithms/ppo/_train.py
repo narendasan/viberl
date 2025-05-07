@@ -27,7 +27,7 @@ from viberl.utils.types import EvalCallback
 
 _LOGGER = logging.getLogger(__name__)
 
-train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array, jax.Array]]
+train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array], Tuple[jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array]]
 
 returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Array]]
 
@@ -36,8 +36,6 @@ def _calculate_returns(state: State, cfg: _TrainingConfig, rollout: Rollout) -> 
     last_obs = rollout.obs[-1]
     next_values = state.critic(last_obs)
     collected_values = rollout.values
-
-    print(type(state.actor.returns_var))
 
     next_values = nnx.cond(
         cfg.normalize_returns,
@@ -127,7 +125,7 @@ def _mb_actor_loss(
 
 
 @nnx.scan(in_axes=(None, None, None, None, None, 0), out_axes=(0, 0, 0, 0, 0, 0, 0))
-def _train_step(
+def _train_epoch(
     state: State,
     cfg: _TrainingConfig,
     rollout: Rollout,
@@ -135,6 +133,9 @@ def _train_step(
     returns: jax.Array,
     mb_idxs: jax.Array
 ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+    """
+    Scans over mb_idxs to train a full epoch per call
+    """
 
     actor_grad_fn = nnx.value_and_grad(_mb_actor_loss, has_aux=True)
     (loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)), actor_grads = actor_grad_fn(state.actor, cfg, rollout, advantages, returns, mb_idxs)
@@ -182,60 +183,61 @@ def batch_update(
     calculate_returns_fn: returns_fn,
     train_step_fn: train_fn
 ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    # @nnx.jit(static_argnums=(1,))
-    # def _batch_update(
-    #     state: State,
-    #     cfg: _TrainingConfig,
-    #     rollout: Rollout
-    # ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-    advantages, returns = calculate_returns_fn(state, cfg, rollout)
 
-    normed_returns = _normalize_returns_by_step(state, returns)
+    @nnx.jit(static_argnums=(1,))
+    def _batch_update(
+        state: State,
+        cfg: _TrainingConfig,
+        rollout: Rollout
+    ) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+        advantages, returns = calculate_returns_fn(state, cfg, rollout)
 
-    returns = nnx.cond(
-        cfg.normalize_returns,
-        lambda: normed_returns,
-        lambda: returns
-    )
+        normed_returns = _normalize_returns_by_step(state, returns)
 
-    batch_size = rollout.obs.shape[0]
-    minibatch_size = batch_size // cfg.num_minibatches
-    #_LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
+        returns = nnx.cond(
+            cfg.normalize_returns,
+            lambda: normed_returns,
+            lambda: returns
+        )
 
-    batch_idxs = jnp.arange(batch_size)
-    mb_idxs = batch_idxs.reshape(-1, minibatch_size)
+        batch_size = rollout.obs.shape[0]
+        minibatch_size = batch_size // cfg.num_minibatches
+        #_LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
 
-    pg_loss = v_loss = entropy_loss = ratio = approx_kl = clipfracs = jnp.empty((cfg.num_update_epochs, cfg.num_minibatches))
-    ratio = jnp.empty((cfg.num_update_epochs, cfg.num_minibatches, minibatch_size))
+        batch_idxs = jnp.arange(batch_size)
+        mb_idxs = batch_idxs.reshape(-1, minibatch_size)
 
-    # TODO: JAXIFY
-    def _update_epoch(
-        e: int,
-        carry: Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]
-    ) -> Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array,jax.Array, jax.Array]]:
-        state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio) = carry
-        _, _pg_loss, _v_loss, _entropy_loss, _approx_kl, _clipfracs, _ratio = train_step_fn(state, cfg, rollout, advantages, returns, mb_idxs)
-        pg_loss = pg_loss.at[e].set(_pg_loss)
-        v_loss = v_loss.at[e].set(_v_loss)
-        entropy_loss = entropy_loss.at[e].set(_entropy_loss)
-        ratio = ratio.at[e].set(_ratio)
-        approx_kl = approx_kl.at[e].set(_approx_kl)
-        clipfracs = clipfracs.at[e].set(_clipfracs)
-        return state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)
+        pg_loss = v_loss = entropy_loss = ratio = approx_kl = clipfracs = jnp.empty((cfg.num_update_epochs, cfg.num_minibatches))
+        ratio = jnp.empty((cfg.num_update_epochs, cfg.num_minibatches, minibatch_size))
 
-    (state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)) = nnx.fori_loop(
-        0,
-        cfg.num_update_epochs,
-        _update_epoch,
-        (state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)),
-    )
+        # TODO: JAXIFY
+        def _update_epoch(
+            e: int,
+            carry: Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]
+        ) -> Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array,jax.Array, jax.Array]]:
+            state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio) = carry
+            _, _pg_loss, _v_loss, _entropy_loss, _approx_kl, _clipfracs, _ratio = train_step_fn(state, cfg, rollout, advantages, returns, mb_idxs)
+            pg_loss = pg_loss.at[e].set(_pg_loss)
+            v_loss = v_loss.at[e].set(_v_loss)
+            entropy_loss = entropy_loss.at[e].set(_entropy_loss)
+            ratio = ratio.at[e].set(_ratio)
+            approx_kl = approx_kl.at[e].set(_approx_kl)
+            clipfracs = clipfracs.at[e].set(_clipfracs)
+            return state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)
+
+        (state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)) = nnx.fori_loop(
+            0,
+            cfg.num_update_epochs,
+            _update_epoch,
+            (state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)),
+        )
 
 
-    ratio_min = ratio[-1][-1].min()
-    ratio_max = ratio[-1][-1].max()
+        ratio_min = ratio[-1][-1].min()
+        ratio_max = ratio[-1][-1].max()
 
-    return pg_loss[-1][-1], v_loss[-1][-1], entropy_loss[-1][-1], approx_kl[-1][-1], clipfracs[-1], ratio[-1][-1]
-    #return _batch_update(state, cfg, rollout)
+        return pg_loss[-1][-1], v_loss[-1][-1], entropy_loss[-1][-1], approx_kl[-1][-1], clipfracs[-1], ratio[-1][-1]
+    return _batch_update(state, cfg, rollout)
 
 
 def train(
@@ -357,7 +359,7 @@ def train(
                 training_cfg,
                 flattened_rollout,
                 calculate_returns_fn=_calculate_returns,
-                train_step_fn=_train_step
+                train_step_fn=_train_epoch
             )
 
         if u % cfg.eval_frequency == 0:
