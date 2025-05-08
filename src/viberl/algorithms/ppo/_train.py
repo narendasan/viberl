@@ -32,38 +32,60 @@ train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.
 
 returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Array]]
 
-@nnx.jit
-def _calculate_returns(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
+#@nnx.jit
+# def _calculate_returns(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
+#     last_obs = rollout.obs[-1]
+#     next_values = state.critic(last_obs)
+#     collected_values = rollout.values
+
+#     next_values = nnx.cond(
+#         cfg.normalize_returns,
+#         lambda: (jax.lax.clamp(-5.0, next_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
+#         lambda: next_values
+#     )
+
+#     collected_values = nnx.cond(
+#         cfg.normalize_returns,
+#         lambda: (jax.lax.clamp(-5.0, collected_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
+#         lambda: collected_values
+#     )
+
+#     rewards = nnx.cond(
+#         cfg.v_bootstrap,
+#         lambda: rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * next_values,
+#         lambda: rollout.rewards
+#     )
+
+#     _values = jnp.append(collected_values, jnp.expand_dims(next_values, axis=0), axis=0)
+
+#     deltas = (rewards - _values[:-1]) + (1 - rollout.dones) * (cfg.gamma * _values[1:])
+#     advantages = calculate_discounted_sum(deltas, rollout.dones, cfg.gamma * cfg.gae_lambda, prev_deltas=jnp.zeros_like(deltas[-1]), use_prev=False)
+
+#     returns = advantages + _values[:-1]
+
+#     return advantages, returns
+#
+
+def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1]
-    next_values = state.critic(last_obs)
-    collected_values = rollout.values
+    last_value = state.critic(last_obs)
+    last_value = jnp.where(rollout.dones[-1], 0, last_value)
 
-    next_values = nnx.cond(
-        cfg.normalize_returns,
-        lambda: (jax.lax.clamp(-5.0, next_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
-        lambda: next_values
+    def _calculate_advantages(carry: Tuple[jax.Array, jax.Array], r: Rollout) -> Tuple[Tuple[jax.Array, jax.Array], jax.Array]:
+        advantage, next_value = carry
+        jax.debug.print(f"{r.rewards.shape}")
+        delta = r.rewards.squeeze() + cfg.gamma * next_value * (1 - r.dones) - r.values
+        advantage = delta + cfg.gamma * cfg.gae_lambda * (1 - r.dones) * advantage
+        return (advantage, r.values), advantage
+
+    _, advantages = jax.lax.scan(
+        _calculate_advantages,
+        (jnp.zeros_like(last_value), last_value),
+        rollout,
+        reverse=True
     )
 
-    collected_values = nnx.cond(
-        cfg.normalize_returns,
-        lambda: (jax.lax.clamp(-5.0, collected_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
-        lambda: collected_values
-    )
-
-    rewards = nnx.cond(
-        cfg.v_bootstrap,
-        lambda: rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * next_values,
-        lambda: rollout.rewards
-    )
-
-    _values = jnp.append(collected_values, jnp.expand_dims(next_values, axis=0), axis=0)
-
-    deltas = (rewards - _values[:-1]) + (1 - rollout.dones) * (cfg.gamma * _values[1:])
-    advantages = calculate_discounted_sum(deltas, rollout.dones, cfg.gamma * cfg.gae_lambda, prev_deltas=jnp.zeros_like(deltas[-1]), use_prev=False)
-
-    returns = advantages + _values[:-1]
-
-    return advantages, returns
+    return advantages, advantages + rollout.values
 
 @nnx.jit
 def _mb_critic_loss(
@@ -312,9 +334,9 @@ def train(
                     # if discrete:
                         # action =
                     # else
-                    low = env.action_space(env_params).low
-                    high = env.action_space(env_params).high
-                    action = jnp.clip(action, low, high)
+                    #low = env.action_space(env_params).low
+                    #high = env.action_space(env_params).high
+                    #action = jnp.clip(action, low, high)
 
                     _actions = rollout.actions.at[step].set(action)
                     _logprobs = rollout.logprobs.at[step].set(logprob)
@@ -377,7 +399,7 @@ def train(
                     state,
                     training_cfg,
                     flattened_rollout,
-                    calculate_returns_fn=_calculate_returns,
+                    calculate_returns_fn=_calculate_gae,
                     train_step_fn=_train_epoch
                 )
 
