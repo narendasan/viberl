@@ -8,7 +8,7 @@ import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 
-_WANDB_INSTANCES = []
+_WANDB_INSTANCES = {}
 
 def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """Create a callback for logging to Weights & Biases.
@@ -46,6 +46,7 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
                     reinit="create_new",
                     id=f"{phrase_id}-{config['experiment']['experiment_name']}",
                 )
+                _WANDB_INSTANCES[phrase_id] = run
             else:
                 run = _WANDB_INSTANCES[phrase_id]
             # io_callback returns np.array, which wandb does not like.

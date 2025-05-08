@@ -27,6 +27,13 @@ class _TrainingConfig:
     total_timesteps: int
     weight_decay: float
 
+@struct.dataclass
+class _EvalConfig:
+    normalize_obs: bool
+    normalize_returns: bool
+    normalize_advantages: bool
+    rollout_len: int
+    num_envs: int
 
 @struct.dataclass
 class Config:
@@ -78,6 +85,16 @@ class Config:
             target_kl=self.target_kl,
             total_timesteps=self.total_timesteps,
             weight_decay=self.weight_decay
+        )
+
+
+    def eval_config_subset(self) -> _EvalConfig:
+        return _EvalConfig(
+            normalize_obs=self.normalize_obs,
+            normalize_returns=self.normalize_returns,
+            normalize_advantages=self.normalize_advantages,
+            rollout_len=self.rollout_len,
+            num_envs=self.num_envs,
         )
 
     @classmethod

@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, List, Tuple, Optional
+from typing import Callable, List, Tuple, Optional, Dict, Any
 
 import jax
 import jax.numpy as jnp
@@ -24,6 +24,7 @@ from viberl.algorithms.ppo._state import State
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
 from viberl.utils.types import EvalCallback
+from viberl.utils._eval_callbacks import _default_eval_callback
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -249,6 +250,7 @@ def train(
     eval_callback: Optional[EvalCallback] = None,
 ):
     training_cfg = cfg.training_config_subset()
+    eval_cfg = cfg.eval_config_subset()
 
     total_rewards = jnp.zeros((cfg.num_envs,))
     ep_len = jnp.zeros((cfg.num_envs,))
@@ -266,105 +268,160 @@ def train(
     if cfg.normalize_obs:
         next_obs = state.actor.normalize_obs(next_obs)
 
+    if eval_callback is None:
+        eval_callback = _default_eval_callback
+
     num_updates = cfg.total_timesteps // (cfg.rollout_len * cfg.num_envs)
     #_LOGGER.info(f"Training for {num_updates} updates")
 
     state.global_step = 0
-    for u in range(1, num_updates + 1):
-
-        with jax.profiler.TraceAnnotation("collect_rollout"):
-            rollout = make_empty_rollout(
-                cfg.rollout_len,
-                cfg.num_envs,
-                env.observation_space(env_params).shape,
-                env.action_space(env_params).shape,
-            )
-
-            #_LOGGER.debug(f"Rollout: {rollout.shapes}")
-
-            @nnx.jit
-            def _rollout_step(
-                step: int,
-                carry: Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
-            ) -> Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-                (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = carry
-                state.global_step += cfg.num_envs
-
-                _obs = rollout.obs.at[step].set(next_obs)
-
-                key, action_key, env_step_key = jax.random.split(key, 3)
-
-                action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
-                #_LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
-
-                _actions = rollout.actions.at[step].set(action)
-                _logprobs = rollout.logprobs.at[step].set(logprob)
-
-                value = state.critic(next_obs)
-                #_LOGGER.debug(f"Value: {value.shape}")
-
-                _values = rollout.values.at[step].set(value)
-
-                next_obs, env_state, reward, dones, infos = vmap_step(
-                    jax.random.split(env_step_key, cfg.num_envs),
-                    env_state,
-                    action,
-                    env_params
+    def _train_eval(
+        e: int,
+        train_eval_carry: Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
+    ) -> Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
+        state, env_state, next_obs, total_rewards, ep_len, key = train_eval_carry
+        def _train(
+            t: int,
+            train_carry: Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
+        ) -> Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
+            state, env_state, next_obs, total_rewards, ep_len, key = train_carry
+            with jax.profiler.TraceAnnotation("collect_rollout"):
+                rollout = make_empty_rollout(
+                    cfg.rollout_len,
+                    cfg.num_envs,
+                    env.observation_space(env_params).shape,
+                    env.action_space(env_params).shape,
                 )
 
-                if len(next_obs.shape) == 1:
-                    next_obs = jnp.expand_dims(next_obs, axis=0)
+                #_LOGGER.debug(f"Rollout: {rollout.shapes}")
 
-                if cfg.normalize_obs:
-                    # Need this indirection so that state can be mutated in ActorMLP
-                    next_obs = state.actor.normalize_obs(next_obs)
+                @nnx.jit
+                def _rollout_step(
+                    step: int,
+                    rollout_carry: Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
+                ) -> Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+                    (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = rollout_carry
+                    state.global_step += cfg.num_envs
 
-                _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
-                _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
+                    _obs = rollout.obs.at[step].set(next_obs)
 
-                reward = jnp.expand_dims(reward, axis=-1)
-                #_LOGGER.debug(f"Reward: {reward.shape}")
-                reward = jnp.sum(reward, axis=1)
+                    key, action_key, env_step_key = jax.random.split(key, 3)
 
-                _rewards = rollout.rewards.at[step].set(jnp.expand_dims(reward, axis=-1))
+                    action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
+                    #_LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
+                    # if discrete:
+                        # action =
+                    # else
+                    low = env.action_space(env_params).low
+                    high = env.action_space(env_params).high
+                    action = jnp.clip(action, low, high)
 
-                total_rewards += reward
-                ep_len += 1
+                    _actions = rollout.actions.at[step].set(action)
+                    _logprobs = rollout.logprobs.at[step].set(logprob)
 
-                rollout = Rollout(
-                    obs=_obs,
-                    actions=_actions,
-                    logprobs=_logprobs,
-                    rewards=_rewards,
-                    dones=_dones,
-                    truncated=_truncated,
-                    values=_values,
+                    #_LOGGER.debug(f"Value: {value.shape}")
+
+                    value = state.critic(next_obs)
+                    _values = rollout.values.at[step].set(value)
+
+                    next_obs, env_state, reward, dones, infos = vmap_step(
+                        jax.random.split(env_step_key, cfg.num_envs),
+                        env_state,
+                        action,
+                        env_params
+                    )
+
+                    if len(next_obs.shape) == 1:
+                        next_obs = jnp.expand_dims(next_obs, axis=0)
+
+                    if cfg.normalize_obs:
+                        # Need this indirection so that state can be mutated in ActorMLP
+                        next_obs = state.actor.normalize_obs(next_obs)
+
+                    _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
+                    _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
+
+                    reward = jnp.expand_dims(reward, axis=-1)
+                    #_LOGGER.debug(f"Reward: {reward.shape}")
+                    reward = jnp.sum(reward, axis=1)
+
+                    _rewards = rollout.rewards.at[step].set(jnp.expand_dims(reward, axis=-1))
+
+                    total_rewards += reward
+                    ep_len += 1
+
+                    rollout = Rollout(
+                        obs=_obs,
+                        actions=_actions,
+                        logprobs=_logprobs,
+                        rewards=_rewards,
+                        dones=_dones,
+                        truncated=_truncated,
+                        values=_values,
+                    )
+
+                    return state, rollout, next_obs, env_state, total_rewards, ep_len, key
+
+                (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
+                    0,
+                    cfg.rollout_len,
+                    _rollout_step,
+                    (state, rollout, next_obs, env_state, total_rewards, ep_len, key)
                 )
 
-                return state, rollout, next_obs, env_state, total_rewards, ep_len, key
+            flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
+            #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
 
-            (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
-                0,
-                cfg.rollout_len,
-                _rollout_step,
-                (state, rollout, next_obs, env_state, total_rewards, ep_len, key)
-            )
+            with jax.profiler.TraceAnnotation("training_loop"):
+                (state, pg_loss, v_loss, entropy_loss, approx_kl, clipfrac, ratio) = batch_update(
+                    state,
+                    training_cfg,
+                    flattened_rollout,
+                    calculate_returns_fn=_calculate_returns,
+                    train_step_fn=_train_epoch
+                )
 
-        flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
-        #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
+            # if u % cfg.eval_frequency == 0:
+            #     eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
+            #     if eval_callback:
+            #         eval_callback(state, cfg, eval_result, eval_rollout)
+            #     state.train_metrics.reset()
+            #     state.eval_metrics.reset()
 
-        with jax.profiler.TraceAnnotation("training_loop"):
-            (state, pg_loss, v_loss, entropy_loss, approx_kl, clipfrac, ratio) = batch_update(
-                state,
-                training_cfg,
-                flattened_rollout,
-                calculate_returns_fn=_calculate_returns,
-                train_step_fn=_train_epoch
-            )
+            return state, env_state, next_obs, total_rewards, ep_len, key
 
-        if u % cfg.eval_frequency == 0:
-            eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
-            if eval_callback:
-                eval_callback(state, cfg, eval_result, eval_rollout)
-            state.train_metrics.reset()
-            state.eval_metrics.reset()
+        (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
+            0,
+            cfg.eval_frequency,
+            _train,
+            (state, env_state, next_obs, total_rewards, ep_len, key)
+        )
+
+        eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
+        state.eval_metrics.update(
+            reward=eval_result.returns,
+            ep_len=eval_result.lengths,
+        )
+        eval_callback(state, cfg, eval_result, eval_rollout)
+        state.train_metrics.reset()
+        state.eval_metrics.reset()
+
+        return state, env_state, next_obs, total_rewards, ep_len, key
+
+    # state, env_state, next_obs, total_rewards, ep_len, key = nnx.fori_loop(
+    #     0,
+    #     num_updates // cfg.eval_frequency,
+    #     _train_eval,
+    #     (state, env_state, next_obs, total_rewards, ep_len, key)
+    # )
+    te_carry = (state, env_state, next_obs, total_rewards, ep_len, key)
+    for te in range(num_updates // cfg.eval_frequency):
+        te_carry = _train_eval(te, te_carry)
+    (state, env_state, next_obs, total_rewards, ep_len, key) = te_carry
+
+    # if u % cfg.eval_frequency == 0:
+    #     eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
+    #     if eval_callback:
+    #         eval_callback(state, cfg, eval_result, eval_rollout)
+    #     state.train_metrics.reset()
+    #     state.eval_metrics.reset()

@@ -9,6 +9,13 @@ from viberl.utils.types import EvalCallback, PolicyEvalResult
 
 _LOGGER = logging.getLogger(__name__)
 
+def _default_eval_callback(
+    state: struct.PyTreeNode,
+    cfg: struct.PyTreeNode,
+    eval_results: PolicyEvalResult,
+    rollout: struct.PyTreeNode,
+) -> Tuple[Tuple[Any, ...], ...]:
+    return ()
 """
 Creating an evaluation callback. Two examples are available:
 
