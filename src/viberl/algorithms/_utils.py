@@ -12,9 +12,9 @@ def normalize(a: jax.Array, eps: float=1e-8) -> jax.Array:
 
 @jax.jit
 def policy_grad_loss(adv: jax.Array, ratio: jax.Array, *, clip_coef: float) -> jax.Array:
-    l1 = -adv * ratio
-    l2 = -adv * jax.lax.clamp(1 - clip_coef, ratio, 1 + clip_coef) # Why dont we just use l2?
-    return jax.lax.max(l1, l2).mean()
+    l1 = adv * ratio
+    l2 = adv * jax.lax.clamp(1 - clip_coef, ratio, 1 + clip_coef) # Why dont we just use l2?
+    return -jax.lax.min(l1, l2).mean()
 
 @jax.jit
 def value_loss(

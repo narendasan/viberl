@@ -1,12 +1,16 @@
 import copy
 from typing import Any, Dict, Tuple
 
+import logging
+
 import jax
 from flax import struct
 
 import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
+
+_LOGGER = logging.getLogger(__name__)
 
 _WANDB_INSTANCES = {}
 
@@ -44,7 +48,7 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
                     config=config,
                     resume="allow",
                     reinit="create_new",
-                    id=f"{phrase_id}-{config['experiment']['experiment_name']}",
+                    id=f"{phrase_id}_{config['experiment']['experiment_name']}",
                 )
                 _WANDB_INSTANCES[phrase_id] = run
             else:
@@ -58,6 +62,7 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
         eval_metrics = state.eval_metrics.compute()
 
         metrics = {f"training/{key}": value for key, value in train_metrics.items()} | {f"eval/{key}": value for key, value in eval_metrics.items()}
+        _LOGGER.debug(metrics)
 
         jax.experimental.io_callback(
             log,

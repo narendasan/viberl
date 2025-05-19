@@ -8,15 +8,15 @@ from typing import Any, Dict
 def _generate_experiment_name(config: Dict[str, Any]) -> str:
     prefix = config["experiment"]["name"]
     timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    prefix += f"-{timestamp}"
+    prefix += f"_{timestamp}"
     seed = config["experiment"]["root_seed"]
-    prefix += f"-seed{seed}"
+    prefix += f"_seed{seed}"
     steps = config["algorithm"]["total_timesteps"]
-    prefix += f"-steps{steps}"
-    lr = config["algorithm"]["actor_lr"]
-    prefix += f"-alr{lr}"
-    lr = config["algorithm"]["critic_lr"]
-    prefix += f"-clr{lr}"
+    prefix += f"_steps{steps:.2E}"
+    #lr = config["algorithm"]["actor_lr"]
+    #prefix += f"_alr{lr:.2E}"
+    #lr = config["algorithm"]["critic_lr"]
+    #prefix += f"_clr{lr:.2E}"
 
     if "tags" in config["experiment"]:
         tags = config["experiment"]["tags"]

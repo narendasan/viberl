@@ -33,7 +33,7 @@ root_key = jax.random.key(config["experiment"]["root_seed"])
 agent_keys = jax.random.split(root_key, config["experiment"]["num_agent_seeds"])
 
 # Here we create a vector of N agents that we will train seeded with their own key derived from the root key
-env_info = create("brax/walker2d")
+env_info = create(config["experiment"]["env_name"])
 cfg = Config.from_dict(config["algorithm"])
 rngs = flax.nnx.Rngs(root_key)
 ppo_state = State.from_env(cfg, env_info=env_info, rngs=rngs)

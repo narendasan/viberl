@@ -73,7 +73,11 @@ def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tupl
 
     def _calculate_advantages(carry: Tuple[jax.Array, jax.Array], r: Rollout) -> Tuple[Tuple[jax.Array, jax.Array], jax.Array]:
         advantage, next_value = carry
-        jax.debug.print(f"{r.rewards.shape}")
+        jax.experimental.io_callback(
+            lambda r: _LOGGER.debug(f"reward: {r.rewards.shape}, value: {r.values.shape}"),
+            None,
+            r
+        )
         delta = r.rewards.squeeze() + cfg.gamma * next_value * (1 - r.dones) - r.values
         advantage = delta + cfg.gamma * cfg.gae_lambda * (1 - r.dones) * advantage
         return (advantage, r.values), advantage
@@ -122,6 +126,12 @@ def _mb_actor_loss(
     mb_idxs: jax.Array
 ) -> Tuple[jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]:
 
+    # jax.experimental.io_callback(
+    #     lambda idxs: _LOGGER.debug(f"idxs: {idxs}"),
+    #     None,
+    #     mb_idxs
+    # )
+
     b_obs = rollout.obs[mb_idxs, :]
     b_actions = rollout.actions[mb_idxs, :]
     b_logprobs = rollout.logprobs[mb_idxs, :]
@@ -137,10 +147,9 @@ def _mb_actor_loss(
     clipfracs = jnp.mean((jnp.abs(ratio - 1.0) > cfg.surrogate_clip_coef).astype(jnp.float32)) #.item()
 
     b_advantages = advantages[:, mb_idxs] #.flatten()
-    b_returns = returns[mb_idxs, :]
     mb_advantages = nnx.cond(cfg.normalize_advantages, lambda: normalize(b_advantages), lambda: b_advantages)
 
-    pg_loss = policy_grad_loss(b_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
+    pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
     entropy_loss = entropy.mean()
     loss = pg_loss - entropy_loss * cfg.entropy_coef
 
@@ -195,6 +204,11 @@ def _train_epoch(
 
 @nnx.scan(in_axes=(None, 0), out_axes=(0))
 def _normalize_returns_by_step(state: State, returns: jax.Array) -> jax.Array:
+    jax.experimental.io_callback(
+        lambda r: _LOGGER.debug(f"returns: {r.shape}"),
+        None,
+        returns
+    )
     normed_returns = state.actor.normalize_returns(returns)
     return normed_returns
 
@@ -334,9 +348,6 @@ def train(
                     # if discrete:
                         # action =
                     # else
-                    #low = env.action_space(env_params).low
-                    #high = env.action_space(env_params).high
-                    #action = jnp.clip(action, low, high)
 
                     _actions = rollout.actions.at[step].set(action)
                     _logprobs = rollout.logprobs.at[step].set(logprob)
@@ -412,13 +423,6 @@ def train(
 
             return state, env_state, next_obs, total_rewards, ep_len, key
 
-        (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
-            0,
-            cfg.eval_frequency,
-            _train,
-            (state, env_state, next_obs, total_rewards, ep_len, key)
-        )
-
         eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
         state.eval_metrics.update(
             reward=eval_result.returns,
@@ -427,6 +431,13 @@ def train(
         eval_callback(state, cfg, eval_result, eval_rollout)
         state.train_metrics.reset()
         state.eval_metrics.reset()
+
+        (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
+            0,
+            cfg.eval_frequency,
+            _train,
+            (state, env_state, next_obs, total_rewards, ep_len, key)
+        )
 
         return state, env_state, next_obs, total_rewards, ep_len, key
 
