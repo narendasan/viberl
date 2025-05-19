@@ -151,7 +151,7 @@ def _mb_actor_loss(
 
     pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
     entropy_loss = entropy.mean()
-    loss = pg_loss - entropy_loss * cfg.entropy_coef
+    loss = pg_loss.mean() + (entropy_loss * cfg.entropy_coef)
 
     return loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)
 
@@ -227,7 +227,7 @@ def batch_update(
         cfg: _TrainingConfig,
         rollout: Rollout
     ) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-        advantages, returns = calculate_returns_fn(state, cfg, rollout)
+        advantages, returns = jax.lax.stop_gradient(calculate_returns_fn(state, cfg, rollout))
 
         normed_returns = _normalize_returns_by_step(state, returns)
 
@@ -307,8 +307,9 @@ def train(
     if eval_callback is None:
         eval_callback = _default_eval_callback
 
-    num_updates = cfg.total_timesteps // (cfg.rollout_len * cfg.num_envs)
-    #_LOGGER.info(f"Training for {num_updates} updates")
+    num_train_evals = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
+    num_updates = cfg.total_timesteps // num_train_evals
+    _LOGGER.info(f"Training for {num_updates} updates")
 
     state.global_step = 0
     def _train_eval(
@@ -434,7 +435,7 @@ def train(
 
         (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
             0,
-            cfg.eval_frequency,
+            num_train_evals,
             _train,
             (state, env_state, next_obs, total_rewards, ep_len, key)
         )
@@ -448,7 +449,7 @@ def train(
     #     (state, env_state, next_obs, total_rewards, ep_len, key)
     # )
     te_carry = (state, env_state, next_obs, total_rewards, ep_len, key)
-    for te in range(num_updates // cfg.eval_frequency):
+    for te in range(num_updates):
         te_carry = _train_eval(te, te_carry)
     (state, env_state, next_obs, total_rewards, ep_len, key) = te_carry
 
