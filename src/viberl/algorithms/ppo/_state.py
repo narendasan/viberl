@@ -16,19 +16,23 @@ from viberl.models._critic import CriticMLP
 
 _LOGGER = logging.getLogger(__name__)
 
+class ActorCritic(nnx.Module):
+    def __init__(self, actor: ActorMLP, critic: CriticMLP):
+        super().__init__()
+        self.actor = actor
+        self.critic = critic
+
 @struct.dataclass(frozen=False)
 class State:
-    actor: ActorMLP
-    critic: CriticMLP
+    actor_critic: ActorCritic
     train_metrics: nnx.MultiMetric
     eval_metrics: nnx.MultiMetric
-    actor_optimizer: nnx.Optimizer
-    critic_optimizer: nnx.Optimizer
+    optimizer: nnx.Optimizer
     global_step: int = 0
 
     def _generate_checkpoint(self):
-        actor_state = nnx.state(self.actor)
-        critic_state = nnx.state(self.critic)
+        actor_state = nnx.state(self.actor_critic.actor)
+        critic_state = nnx.state(self.actor_critic.critic)
         return {
             "global_step": self.global_step,
             "actor": actor_state,
@@ -38,13 +42,13 @@ class State:
         }
 
     def load_ckpt_dict(self, ckpt: Dict[str, Any]) -> None:
-        nnx.update(self.actor, ckpt["actor"])
+        nnx.update(self.actor_critic.actor, ckpt["actor"])
 
-        _LOGGER.info(f"Actor network {self.actor}")
+        _LOGGER.info(f"Actor network {self.actor_critic.actor}")
 
-        nnx.update(self.critic, ckpt["critic"])
+        nnx.update(self.actor_critic.critic, ckpt["critic"])
 
-        _LOGGER.info(f"Critic network {self.critic}")
+        _LOGGER.info(f"Critic network {self.actor_critic.critic}")
 
         #self.actor_optimizer.opt_state = tree_util.tree_unflatten(
         #    tree_util.tree_structure(self.actor_optimizer.opt_state), tree_util.tree_leaves(ckpt["actor_optimizer"])
@@ -76,6 +80,8 @@ class State:
         )
         _LOGGER.info(f"Critic network {critic}")
 
+        actor_critic = ActorCritic(actor=actor, critic=critic)
+
         train_metrics = nnx.MultiMetric(
             loss=nnx.metrics.Average("loss"),
             policy_loss=nnx.metrics.Average("policy_loss"),
@@ -93,26 +99,18 @@ class State:
             ep_len=nnx.metrics.Average("ep_len"),
         )
 
-        actor_optimizer = nnx.Optimizer(
-            actor, optax.chain(
-                optax.clip_by_global_norm(max_norm=cfg.actor_max_grad_norm),
-                optax.adam(learning_rate=cfg.actor_lr)
-            )
-        )
-        critic_optimizer = nnx.Optimizer(
-            critic, optax.chain(
-                optax.clip_by_global_norm(max_norm=cfg.critic_max_grad_norm),
-                optax.adam(learning_rate=cfg.critic_lr)
+        optimizer = nnx.Optimizer(
+            actor_critic, optax.chain(
+                optax.clip_by_global_norm(max_norm=cfg.max_grad_norm),
+                optax.adam(learning_rate=cfg.lr)
             )
         )
 
         return cls(
-            actor=actor,
-            critic=critic,
+            actor_critic=actor_critic,
             train_metrics=train_metrics,
             eval_metrics=eval_metrics,
-            actor_optimizer=actor_optimizer,
-            critic_optimizer=critic_optimizer,
+            optimizer=optimizer,
         )
 
     @classmethod
@@ -122,7 +120,7 @@ class State:
     def policy_fn(self) -> Callable[[jax.Array, jax.Array], jax.Array]:
         def _policy(obs: jax.Array, key: jax.Array) -> jax.Array:
             key, action_key, = jax.random.split(key, 2)
-            action, _, _ = self.actor.get_action(obs, key=action_key)
+            action, _, _ = self.actor_critic.actor.get_action(obs, key=action_key)
             return jnp.squeeze(action, axis=0)
 
         return _policy

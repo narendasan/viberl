@@ -52,7 +52,7 @@ def load_ckpt(
         # TODO: Use the run_name but still generate an acceptable TrainState
         phrase_hash = run_name
     else:
-        phrase_hash = generate_phrase_hash(state.actor.id[1])
+        phrase_hash = generate_phrase_hash(state.actor_critic.actor.id[1])
 
     if not experiment_path.startswith("/"):
         ckpt_dir_path = Path(os.getcwd()) / experiment_path
@@ -159,7 +159,7 @@ def create_checkpointer(
             state.global_step,
             state._generate_checkpoint(),
             eval_results,
-            state.actor.id,
+            state.actor_critic.actor.id,
             cfg.total_timesteps,
         )
 

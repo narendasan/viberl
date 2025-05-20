@@ -67,7 +67,7 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
         jax.experimental.io_callback(
             log,
             (),  # result_shape_dtypes (wandb.log returns None)
-            copy.deepcopy(state.actor.id),
+            copy.deepcopy(state.actor_critic.actor.id),
             state.global_step,
             metrics,
         )

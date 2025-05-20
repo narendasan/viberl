@@ -118,7 +118,7 @@ def create_eval_logger() -> EvalCallback:
             cfg.total_timesteps,
             eval_results.returns.mean(),
             eval_results.lengths.mean(),
-            state.actor.id,
+            state.actor_critic.actor.id,
         )
         return ()
 

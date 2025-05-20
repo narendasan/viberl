@@ -33,7 +33,7 @@ def eval(
     key, reset_key = jax.random.split(key, 2)
     next_obs, env_state = vmap_reset(jax.random.split(reset_key, cfg.num_envs), env_params)
 
-    obs_mean, obs_var = state.actor.obs_mean.value, state.actor.obs_var.value
+    obs_mean, obs_var = state.actor_critic.actor.obs_mean.value, state.actor_critic.actor.obs_var.value
 
     if len(next_obs.shape) == 1:
         next_obs = jnp.expand_dims(next_obs, axis=0)
@@ -44,8 +44,8 @@ def eval(
     rollout = make_empty_rollout(
         cfg.rollout_len,
         cfg.num_envs,
-        state.actor.obs_shape,
-        state.actor.action_shape,
+        state.actor_critic.actor.obs_shape,
+        state.actor_critic.actor.action_shape,
     )
 
     _LOGGER.debug(f"Rollout: {rollout.shapes}")
@@ -65,14 +65,14 @@ def eval(
         key, action_key, env_step_key = jax.random.split(key, 3)
 
         _obs = rollout.obs.at[step].set(next_obs)
-        action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
+        action, logprob, _ = state.actor_critic.actor.get_action(next_obs, key=action_key)
         _LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
 
         _actions = rollout.actions.at[step].set(action)
         _logprobs = rollout.logprobs.at[step].set(logprob)
 
         def _compute_values(next_obs: jax.Array) -> jax.Array:
-            value = state.critic(next_obs)
+            value = state.actor_critic.critic(next_obs)
             _LOGGER.debug(f"Value: {value.shape}")
             return rollout.values.at[step].set(value)
 

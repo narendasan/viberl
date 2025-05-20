@@ -57,10 +57,8 @@ class Config:
     critic_hidden_dims: Sequence[int]
     actor_activation_fn: Callable[[jax.Array], jax.Array]
     critic_activation_fn: Callable[[jax.Array], jax.Array]
-    actor_lr: float
-    critic_lr: float
-    actor_max_grad_norm: float
-    critic_max_grad_norm: float
+    lr: float
+    max_grad_norm: float
     total_timesteps: int
     weight_decay: float
     eval_frequency: int

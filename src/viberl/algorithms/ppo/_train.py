@@ -20,7 +20,7 @@ from viberl.algorithms.ppo._rollout import (
     flatten_vec_rollout,
     make_empty_rollout,
 )
-from viberl.algorithms.ppo._state import State
+from viberl.algorithms.ppo._state import State, ActorCritic
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
 from viberl.utils.types import EvalCallback
@@ -35,7 +35,7 @@ returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Ar
 #@nnx.jit
 # def _calculate_returns(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
 #     last_obs = rollout.obs[-1]
-#     next_values = state.critic(last_obs)
+#     next_values = state.actor_critic.critic(last_obs)
 #     collected_values = rollout.values
 
 #     next_values = nnx.cond(
@@ -68,7 +68,7 @@ returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Ar
 
 def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1, :]
-    last_value = state.critic(last_obs)
+    last_value = state.actor_critic.critic(last_obs)
     last_done = rollout.dones[-1, :]
     #last_value = jnp.where(rollout.dones[-1, :], 0, last_value)
 
@@ -123,7 +123,7 @@ def _mb_actor_loss(
     rollout: Rollout,
     advantages: jax.Array,
     mb_idxs: jax.Array
-) -> Tuple[jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]:
+) -> Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
 
     # jax.experimental.io_callback(
     #     lambda idxs: _LOGGER.debug(f"idxs: {idxs}"),
@@ -155,9 +155,22 @@ def _mb_actor_loss(
 
     pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
     entropy_loss = entropy.mean()
-    loss = pg_loss.mean() + (entropy_loss * cfg.entropy_coef)
 
-    return loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)
+    return pg_loss, entropy_loss, approx_kl, clipfracs, ratio
+
+@nnx.jit
+def mb_loss(
+    actor_critic: ActorCritic,
+    cfg: _TrainingConfig,
+    rollout: Rollout,
+    advantages: jax.Array,
+    returns: jax.Array,
+    mb_idxs: jax.Array
+) -> Tuple[jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]:
+    pg_loss, entropy_loss, approx_kl, clipfracs, ratio = _mb_actor_loss(actor_critic.actor, cfg, rollout, advantages, mb_idxs)
+    value_loss = _mb_critic_loss(actor_critic.critic, cfg, rollout, returns, mb_idxs)
+    loss = pg_loss + entropy_loss * cfg.entropy_coef + value_loss * cfg.v_coef
+    return loss, (pg_loss, value_loss, entropy_loss, approx_kl, clipfracs, ratio)
 
 
 @nnx.scan(in_axes=(nnx.Carry, None, None, None, None, 0), out_axes=(nnx.Carry, 0, 0, 0, 0, 0, 0, 0))
@@ -173,12 +186,10 @@ def _train_epoch(
     Scans over mb_idxs to train a full epoch per call
     """
 
-    actor_grad_fn = nnx.value_and_grad(_mb_actor_loss, has_aux=True)
-    (loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)), actor_grads = actor_grad_fn(state.actor, cfg, rollout, advantages, mb_idxs)
+    grad_fn = nnx.value_and_grad(mb_loss, has_aux=True)
+    (loss, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs)
     explained_var = 1 - jnp.var(returns - rollout.values) / jnp.var(returns)
 
-    critic_grad_fn = nnx.value_and_grad(_mb_critic_loss)
-    v_loss, critic_grads = critic_grad_fn(state.critic, cfg, rollout, returns, mb_idxs)
     ratio_min = ratio.min()
     ratio_max = ratio.max()
 
@@ -200,9 +211,7 @@ def _train_epoch(
         ratio_max=ratio_max
     )
     # Grad clipping is part of the optimizer
-    state.actor_optimizer.update(actor_grads)
-    # Grad clipping is part of the optimizer
-    state.critic_optimizer.update(critic_grads)
+    state.optimizer.update(grads)
 
     return state, loss, pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio
 
@@ -305,7 +314,7 @@ def train(
         next_obs = jnp.expand_dims(next_obs, axis=0)
 
     if cfg.normalize_obs:
-        next_obs = state.actor.normalize_obs(next_obs)
+        next_obs = state.actor_critic.actor.normalize_obs(next_obs)
 
     if eval_callback is None:
         eval_callback = _default_eval_callback
@@ -347,7 +356,7 @@ def train(
 
                     key, action_key, env_step_key = jax.random.split(key, 3)
 
-                    action, logprob, _ = state.actor.get_action(next_obs, key=action_key)
+                    action, logprob, _ = state.actor_critic.actor.get_action(next_obs, key=action_key)
                     #_LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
                     # if discrete:
                         # action =
@@ -358,7 +367,7 @@ def train(
 
                     #_LOGGER.debug(f"Value: {value.shape}")
 
-                    value = state.critic(next_obs)
+                    value = state.actor_critic.critic(next_obs)
                     _values = rollout.values.at[step].set(value)
 
                     next_obs, env_state, reward, dones, infos = vmap_step(
@@ -373,13 +382,13 @@ def train(
 
                     if cfg.normalize_obs:
                         # Need this indirection so that state can be mutated in ActorMLP
-                        next_obs = state.actor.normalize_obs(next_obs)
+                        next_obs = state.actor_critic.actor.normalize_obs(next_obs)
 
                     _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
                     _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
 
                     if cfg.normalize_rewards:
-                        reward = state.actor.normalize_rewards(reward)
+                        reward = state.actor_critic.actor.normalize_rewards(reward)
 
                     reward = jnp.expand_dims(reward, axis=-1)
                     #_LOGGER.debug(f"Reward: {reward.shape}")
