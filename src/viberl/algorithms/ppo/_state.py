@@ -97,6 +97,7 @@ class State:
         eval_metrics = nnx.MultiMetric(
             reward=nnx.metrics.Average("reward"),
             ep_len=nnx.metrics.Average("ep_len"),
+            train_reward=nnx.metrics.Average("train_reward"),
         )
 
         optimizer = nnx.Optimizer(

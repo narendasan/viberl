@@ -187,7 +187,7 @@ def _train_epoch(
     """
 
     grad_fn = nnx.value_and_grad(mb_loss, has_aux=True)
-    (loss, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)), grads = grad_fn(state, cfg, rollout, advantages, returns, mb_idxs)
+    (loss, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio)), grads = grad_fn(state.actor_critic, cfg, rollout, advantages, returns, mb_idxs)
     explained_var = 1 - jnp.var(returns - rollout.values) / jnp.var(returns)
 
     ratio_min = ratio.min()
@@ -319,8 +319,9 @@ def train(
     if eval_callback is None:
         eval_callback = _default_eval_callback
 
-    num_train_evals = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
-    num_updates = cfg.total_timesteps // num_train_evals
+    num_train_per_eval = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
+    assert num_train_per_eval > 0, "Eval Frequency must be >= Rollout Len * Num Envs"
+    num_updates = cfg.total_timesteps //  cfg.rollout_len * cfg.num_envs * num_train_per_eval
     _LOGGER.info(f"Training for {num_updates} updates")
 
     state.global_step = 0
@@ -441,6 +442,7 @@ def train(
 
         eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
         state.eval_metrics.update(
+            train_reward=total_rewards,
             reward=eval_result.returns,
             ep_len=eval_result.lengths,
         )
@@ -450,23 +452,23 @@ def train(
 
         (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
             0,
-            num_train_evals,
+            num_train_per_eval,
             _train,
-            (state, env_state, next_obs, total_rewards, ep_len, key)
+            (state, env_state, next_obs, jnp.zeros_like(total_rewards), ep_len, key)
         )
 
         return state, env_state, next_obs, total_rewards, ep_len, key
 
-    # state, env_state, next_obs, total_rewards, ep_len, key = nnx.fori_loop(
-    #     0,
-    #     num_updates // cfg.eval_frequency,
-    #     _train_eval,
-    #     (state, env_state, next_obs, total_rewards, ep_len, key)
-    # )
-    te_carry = (state, env_state, next_obs, total_rewards, ep_len, key)
-    for te in range(num_updates):
-        te_carry = _train_eval(te, te_carry)
-    (state, env_state, next_obs, total_rewards, ep_len, key) = te_carry
+    state, env_state, next_obs, total_rewards, ep_len, key = nnx.fori_loop(
+        0,
+        num_updates,
+        _train_eval,
+        (state, env_state, next_obs, total_rewards, ep_len, key)
+    )
+    # te_carry = (state, env_state, next_obs, total_rewards, ep_len, key)
+    # for te in range(num_updates):
+    #     te_carry = _train_eval(te, te_carry)
+    # (state, env_state, next_obs, total_rewards, ep_len, key) = te_carry
 
     # if u % cfg.eval_frequency == 0:
     #     eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
