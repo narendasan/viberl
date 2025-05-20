@@ -23,48 +23,13 @@ from viberl.algorithms.ppo._rollout import (
 from viberl.algorithms.ppo._state import State, ActorCritic
 from viberl.models._actor import ActorMLP
 from viberl.models._critic import CriticMLP
-from viberl.utils.types import EvalCallback
+from viberl.utils.types import EvalCallback, PolicyEvalResult
 from viberl.utils._eval_callbacks import _default_eval_callback
 
 _LOGGER = logging.getLogger(__name__)
 
 train_fn = Callable[[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array], Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array,  jax.Array, jax.Array, jax.Array]]
-
 returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Array]]
-
-#@nnx.jit
-# def _calculate_returns(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
-#     last_obs = rollout.obs[-1]
-#     next_values = state.actor_critic.critic(last_obs)
-#     collected_values = rollout.values
-
-#     next_values = nnx.cond(
-#         cfg.normalize_returns,
-#         lambda: (jax.lax.clamp(-5.0, next_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
-#         lambda: next_values
-#     )
-
-#     collected_values = nnx.cond(
-#         cfg.normalize_returns,
-#         lambda: (jax.lax.clamp(-5.0, collected_values, 5.0) * jnp.sqrt(state.actor.returns_var.value)) +  state.actor.returns_mean.value,
-#         lambda: collected_values
-#     )
-
-#     rewards = nnx.cond(
-#         cfg.v_bootstrap,
-#         lambda: rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * next_values,
-#         lambda: rollout.rewards
-#     )
-
-#     _values = jnp.append(collected_values, jnp.expand_dims(next_values, axis=0), axis=0)
-
-#     deltas = (rewards - _values[:-1]) + (1 - rollout.dones) * (cfg.gamma * _values[1:])
-#     advantages = calculate_discounted_sum(deltas, rollout.dones, cfg.gamma * cfg.gae_lambda, prev_deltas=jnp.zeros_like(deltas[-1]), use_prev=False)
-
-#     returns = advantages + _values[:-1]
-
-#     return advantages, returns
-#
 
 def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
     last_obs = rollout.obs[-1, :]
@@ -296,7 +261,7 @@ def train(
     key: jax.random.key,
     *,
     eval_callback: Optional[EvalCallback] = None,
-):
+) -> Tuple[State, PolicyEvalResult]:
     training_cfg = cfg.training_config_subset()
     eval_cfg = cfg.eval_config_subset()
 
@@ -465,14 +430,14 @@ def train(
         _train_eval,
         (state, env_state, next_obs, total_rewards, ep_len, key)
     )
-    # te_carry = (state, env_state, next_obs, total_rewards, ep_len, key)
-    # for te in range(num_updates):
-    #     te_carry = _train_eval(te, te_carry)
-    # (state, env_state, next_obs, total_rewards, ep_len, key) = te_carry
 
-    # if u % cfg.eval_frequency == 0:
-    #     eval_result, eval_rollout = eval(state, cfg, env_info, key, collect_values=False)
-    #     if eval_callback:
-    #         eval_callback(state, cfg, eval_result, eval_rollout)
-    #     state.train_metrics.reset()
-    #     state.eval_metrics.reset()
+    eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
+    state.eval_metrics.update(
+        train_reward=total_rewards,
+        reward=eval_result.returns,
+        ep_len=eval_result.lengths,
+    )
+    eval_callback(state, cfg, eval_result, eval_rollout)
+    state.train_metrics.reset()
+    state.eval_metrics.reset()
+    return state, eval_result
