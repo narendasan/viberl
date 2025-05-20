@@ -67,24 +67,25 @@ returns_fn = Callable[[State, _TrainingConfig, Rollout], Tuple[jax.Array, jax.Ar
 #
 
 def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tuple[jax.Array, jax.Array]:
-    last_obs = rollout.obs[-1]
+    last_obs = rollout.obs[-1, :]
     last_value = state.critic(last_obs)
-    last_value = jnp.where(rollout.dones[-1], 0, last_value)
+    last_done = rollout.dones[-1, :]
+    #last_value = jnp.where(rollout.dones[-1, :], 0, last_value)
 
-    def _calculate_advantages(carry: Tuple[jax.Array, jax.Array], r: Rollout) -> Tuple[Tuple[jax.Array, jax.Array], jax.Array]:
-        advantage, next_value = carry
+    def _calculate_advantages(carry: Tuple[jax.Array, jax.Array, jax.Array], r: Rollout) -> Tuple[Tuple[jax.Array, jax.Array, jax.Array], jax.Array]:
+        next_advantage, next_value, next_done = carry
+        delta = r.rewards.squeeze() + cfg.gamma * next_value * (1 - next_done) - r.values
+        advantage = delta + cfg.gamma * cfg.gae_lambda * (1 - next_done) * next_advantage
         jax.experimental.io_callback(
-            lambda r: _LOGGER.debug(f"reward: {r.rewards.shape}, value: {r.values.shape}"),
+            lambda r: _LOGGER.debug(f"reward: {r.rewards}, value: {r.values}, r: {r}"),
             None,
             r
         )
-        delta = r.rewards.squeeze() + cfg.gamma * next_value * (1 - r.dones) - r.values
-        advantage = delta + cfg.gamma * cfg.gae_lambda * (1 - r.dones) * advantage
-        return (advantage, r.values), advantage
+        return (advantage, r.values, r.dones), advantage
 
     _, advantages = jax.lax.scan(
         _calculate_advantages,
-        (jnp.zeros_like(last_value), last_value),
+        (jnp.zeros_like(last_value), last_value, last_done),
         rollout,
         reverse=True
     )
@@ -96,7 +97,6 @@ def _mb_critic_loss(
     critic: CriticMLP,
     cfg: _TrainingConfig,
     rollout: Rollout,
-    advantages: jax.Array,
     returns: jax.Array,
     mb_idxs: jax.Array
 ) -> jax.Array:
@@ -122,7 +122,6 @@ def _mb_actor_loss(
     cfg: _TrainingConfig,
     rollout: Rollout,
     advantages: jax.Array,
-    returns: jax.Array,
     mb_idxs: jax.Array
 ) -> Tuple[jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]:
 
@@ -135,6 +134,12 @@ def _mb_actor_loss(
     b_obs = rollout.obs[mb_idxs, :]
     b_actions = rollout.actions[mb_idxs, :]
     b_logprobs = rollout.logprobs[mb_idxs, :]
+    b_advantages = advantages[mb_idxs, :] #.flatten()
+    jax.experimental.io_callback(
+        lambda r: _LOGGER.debug(f"advantages: {r},"),
+        None,
+        b_advantages
+    )
 
     #_LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Action minibatch: {b_actions.shape}, Logprob minibatch: {b_logprobs.shape}")
 
@@ -146,7 +151,6 @@ def _mb_actor_loss(
     approx_kl = jnp.mean(((ratio - 1.0) - log_ratio))
     clipfracs = jnp.mean((jnp.abs(ratio - 1.0) > cfg.surrogate_clip_coef).astype(jnp.float32)) #.item()
 
-    b_advantages = advantages[:, mb_idxs] #.flatten()
     mb_advantages = nnx.cond(cfg.normalize_advantages, lambda: normalize(b_advantages), lambda: b_advantages)
 
     pg_loss = policy_grad_loss(mb_advantages, ratio, clip_coef=cfg.surrogate_clip_coef)
@@ -170,11 +174,11 @@ def _train_epoch(
     """
 
     actor_grad_fn = nnx.value_and_grad(_mb_actor_loss, has_aux=True)
-    (loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)), actor_grads = actor_grad_fn(state.actor, cfg, rollout, advantages, returns, mb_idxs)
+    (loss, (pg_loss, entropy_loss, approx_kl, clipfracs, ratio)), actor_grads = actor_grad_fn(state.actor, cfg, rollout, advantages, mb_idxs)
     explained_var = 1 - jnp.var(returns - rollout.values) / jnp.var(returns)
 
     critic_grad_fn = nnx.value_and_grad(_mb_critic_loss)
-    v_loss, critic_grads = critic_grad_fn(state.critic, cfg, rollout, advantages, returns, mb_idxs)
+    v_loss, critic_grads = critic_grad_fn(state.critic, cfg, rollout, returns, mb_idxs)
     ratio_min = ratio.min()
     ratio_max = ratio.max()
 
@@ -202,15 +206,15 @@ def _train_epoch(
 
     return state, loss, pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio
 
-@nnx.scan(in_axes=(None, 0), out_axes=(0))
-def _normalize_returns_by_step(state: State, returns: jax.Array) -> jax.Array:
-    jax.experimental.io_callback(
-        lambda r: _LOGGER.debug(f"returns: {r.shape}"),
-        None,
-        returns
-    )
-    normed_returns = state.actor.normalize_returns(returns)
-    return normed_returns
+# @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
+# def _normalize_returns_by_step(state: State, returns: jax.Array) -> Tuple[State, jax.Array]:
+#     jax.experimental.io_callback(
+#         lambda r: _LOGGER.debug(f"returns: {r.shape}"),
+#         None,
+#         returns
+#     )
+#     normed_returns = state.actor.normalize_returns(returns)
+#     return state, normed_returns
 
 def batch_update(
     state: State,
@@ -229,13 +233,12 @@ def batch_update(
     ) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         advantages, returns = jax.lax.stop_gradient(calculate_returns_fn(state, cfg, rollout))
 
-        normed_returns = _normalize_returns_by_step(state, returns)
-
-        returns = nnx.cond(
-            cfg.normalize_returns,
-            lambda: normed_returns,
-            lambda: returns
-        )
+        # state, returns = nnx.cond(
+        #     cfg.normalize_returns,
+        #     lambda s, r: _normalize_returns_by_step(s, r),
+        #     lambda s, r: (s, r),
+        #     state, _returns
+        # )
 
         batch_size = rollout.obs.shape[0]
         minibatch_size = batch_size // cfg.num_minibatches
@@ -374,6 +377,9 @@ def train(
 
                     _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
                     _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
+
+                    if cfg.normalize_rewards:
+                        reward = state.actor.normalize_rewards(reward)
 
                     reward = jnp.expand_dims(reward, axis=-1)
                     #_LOGGER.debug(f"Reward: {reward.shape}")

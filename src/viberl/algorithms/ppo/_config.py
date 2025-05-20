@@ -9,7 +9,7 @@ from flax import struct
 @struct.dataclass
 class _TrainingConfig:
     normalize_obs: bool
-    normalize_returns: bool
+    normalize_rewards: bool
     normalize_advantages: bool
     rollout_len: int
     num_envs: int
@@ -30,7 +30,7 @@ class _TrainingConfig:
 @struct.dataclass
 class _EvalConfig:
     normalize_obs: bool
-    normalize_returns: bool
+    normalize_rewards: bool
     normalize_advantages: bool
     rollout_len: int
     num_envs: int
@@ -38,7 +38,7 @@ class _EvalConfig:
 @struct.dataclass
 class Config:
     normalize_obs: bool
-    normalize_returns: bool
+    normalize_rewards: bool
     normalize_advantages: bool
     rollout_len: int
     num_envs: int
@@ -68,7 +68,7 @@ class Config:
     def training_config_subset(self) -> _TrainingConfig:
         return _TrainingConfig(
             normalize_obs=self.normalize_obs,
-            normalize_returns=self.normalize_returns,
+            normalize_rewards=self.normalize_rewards,
             normalize_advantages=self.normalize_advantages,
             rollout_len=self.rollout_len,
             num_envs=self.num_envs,
@@ -91,7 +91,7 @@ class Config:
     def eval_config_subset(self) -> _EvalConfig:
         return _EvalConfig(
             normalize_obs=self.normalize_obs,
-            normalize_returns=self.normalize_returns,
+            normalize_rewards=self.normalize_rewards,
             normalize_advantages=self.normalize_advantages,
             rollout_len=self.rollout_len,
             num_envs=self.num_envs,

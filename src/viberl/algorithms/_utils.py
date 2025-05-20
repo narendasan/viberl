@@ -33,15 +33,15 @@ def value_loss(
         returns: jax.Array,
         clip_coef: float,
     ):
-        v_loss_unclipped = 0.5 * (new_values - returns) ** 2
+        v_loss_unclipped = (new_values - returns) ** 2
         v_clipped = old_values + jax.lax.clamp( # ??? why use old values
             -clip_coef,
             new_values - old_values,
             clip_coef
         )
-        v_loss_clipped = 0.5 * (v_clipped - returns) ** 2
+        v_loss_clipped = (v_clipped - returns) ** 2
         v_loss_max = jax.lax.max(v_loss_unclipped, v_loss_clipped)
-        return v_loss_max.mean()
+        return 0.5 * v_loss_max.mean()
 
     def _no_clip(
         new_values: jax.Array,

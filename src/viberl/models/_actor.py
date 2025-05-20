@@ -19,7 +19,7 @@ class ActorMLP(nnx.Module):
         hidden_dims: Sequence[int] = [128, 128],
         activation_fn: Callable | str = nnx.tanh,
         normalize_obs: bool = False,
-        normalize_returns: bool = False,
+        normalize_rewards: bool = False,
         normalize_epsilon: float = 1e-8,
         rngs:nnx.Rngs=nnx.Rngs(0)
     ):
@@ -54,9 +54,9 @@ class ActorMLP(nnx.Module):
         self.obs_mean = nnx.Variable(jnp.ones(self.obs_shape), )
         self.obs_var = nnx.Variable(jnp.ones(self.obs_shape))
         self.obs_count = nnx.Variable(jnp.ones((1,)))
-        self.returns_mean = nnx.Variable(jnp.ones(1,))
-        self.returns_var = nnx.Variable(jnp.ones((1,)))
-        self.returns_count = nnx.Variable(jnp.ones((1,)))
+        self.rewards_mean = nnx.Variable(jnp.ones(1,))
+        self.rewards_var = nnx.Variable(jnp.ones((1,)))
+        self.rewards_count = nnx.Variable(jnp.ones((1,)))
         self.normalize_eps = normalize_epsilon
 
     def __call__(self, obs: jax.Array) -> jax.Array:
@@ -119,11 +119,11 @@ class ActorMLP(nnx.Module):
         )
         return (batch - self.obs_mean) / jnp.sqrt(self.obs_var + self.normalize_eps)
 
-    def normalize_returns(self, batch: jax.Array) -> jax.Array:
-        self.returns_mean.value, self.returns_var.value, self.returns_count.value = ActorMLP._update_running_stats(
-            batch, self.returns_mean.value, self.returns_var.value, self.returns_count.value
+    def normalize_rewards(self, batch: jax.Array) -> jax.Array:
+        self.rewards_mean.value, self.rewards_var.value, self.rewards_count.value = ActorMLP._update_running_stats(
+            batch, self.rewards_mean.value, self.rewards_var.value, self.rewards_count.value
         )
-        return jax.lax.clamp(-5.0, (batch - self.returns_mean) / jnp.sqrt(self.returns_var + self.normalize_eps), 5.0)
+        return jax.lax.clamp(-5.0, (batch - self.rewards_mean) / jnp.sqrt(self.rewards_var + self.normalize_eps), 5.0)
 
 
 class VectorizedActor(object):

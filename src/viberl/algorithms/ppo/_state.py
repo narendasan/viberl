@@ -63,7 +63,7 @@ class State:
             hidden_dims=cfg.actor_hidden_dims,
             activation_fn=cfg.actor_activation_fn,
             normalize_obs=cfg.normalize_obs,
-            normalize_returns=cfg.normalize_returns,
+            normalize_rewards=cfg.normalize_rewards,
             rngs=rngs
         )
         _LOGGER.info(f"Actor network {actor}")
