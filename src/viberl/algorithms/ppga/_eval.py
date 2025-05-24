@@ -1,11 +1,10 @@
 import logging
-from typing import Callable, Optional, Tuple, Dict, Any
+from typing import Callable, Tuple, Dict, Any
 
 from flax import nnx
 import jax
 import jax.numpy as jnp
 from gymnax.environments import EnvParams
-from gymnax.environments.environment import Environment
 
 
 from viberl.utils.types import PolicyEvalResult

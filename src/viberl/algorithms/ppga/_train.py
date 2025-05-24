@@ -1,5 +1,5 @@
 import logging
-from typing import Callable, List, Tuple, Optional, Dict, Any
+from typing import Callable, Tuple, Optional, Dict, Any
 
 import jax
 import jax.numpy as jnp
@@ -8,7 +8,6 @@ from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
 
 from viberl.algorithms._utils import (
-    calculate_discounted_sum,
     normalize,
     policy_grad_loss,
     value_loss,

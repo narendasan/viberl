@@ -2,7 +2,6 @@ from typing import Callable, Optional, Sequence, Self, Dict, Any
 
 import copy
 import jax
-import flax
 from flax import nnx
 from flax import struct
 

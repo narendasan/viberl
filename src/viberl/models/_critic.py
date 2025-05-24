@@ -49,14 +49,16 @@ class CriticMLP(nnx.Module):
         return self.critic_(z)
 
 class QDCritic(object):
-    def __init__(self,
-                 obs_shape: Tuple[int],
-                 *,
-                 hidden_dims: Sequence[int] = [256, 265],
-                 activation_fn: Callable | str = nnx.tanh,
-                 num_critics: Optional[int] = None,
-                 critic_list: Optional[Sequence[nnx.Module]] = None,
-                 key: jax.random.key):
+    def __init__(
+        self,
+        obs_shape: Tuple[int, ...],
+        *,
+        hidden_dims: Sequence[int] = [256, 265],
+        activation_fn: Callable | str = nnx.tanh,
+        num_critics: Optional[int] = None,
+        critic_list: Optional[Sequence[nnx.Module]] = None,
+        key: jax.random.key
+    ):
         super().__init__()
 
         assert (num_critics is not None) ^ (critic_list is not None), "Exactly one of num_critics or critic_list must be provided"

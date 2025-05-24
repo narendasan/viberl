@@ -1,14 +1,15 @@
+from token import OP
 import logging
-from typing import Callable, List, Tuple, Optional, Dict, Any
+from typing import Callable, Tuple, Optional, Dict, Any
 
 import jax
 import jax.numpy as jnp
 from flax import nnx
+import optax
 from gymnax.environments import EnvParams
 from gymnax.environments.environment import Environment
 
 from viberl.algorithms._utils import (
-    calculate_discounted_sum,
     normalize,
     policy_grad_loss,
     value_loss,
@@ -20,9 +21,9 @@ from viberl.algorithms.ppo._rollout import (
     flatten_vec_rollout,
     make_empty_rollout,
 )
-from viberl.algorithms.ppo._state import State, ActorCritic
-from viberl.models._actor import ActorMLP
-from viberl.models._critic import CriticMLP
+from viberl.algorithms.ppo._state import State, VecActorQDCritic, TrainState
+from viberl.models._actor import VectorizedActor
+from viberl.models._critic import QDCritic
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 from viberl.utils._eval_callbacks import _default_eval_callback
 
@@ -59,7 +60,7 @@ def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tupl
 
 @nnx.jit
 def _mb_critic_loss(
-    critic: CriticMLP,
+    critic: QDCritic,
     cfg: _TrainingConfig,
     rollout: Rollout,
     returns: jax.Array,
@@ -70,7 +71,7 @@ def _mb_critic_loss(
     b_returns = returns[mb_idxs, :]
     #_LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Value minibatch: {b_values.shape}, Returns minibatch: {b_returns.shape}")
 
-    values = critic(b_obs)
+    values = critic.get_all_values(b_obs)
 
     v_loss = nnx.cond(
         cfg.clip_v_loss,
@@ -83,7 +84,7 @@ def _mb_critic_loss(
 
 @nnx.jit
 def _mb_actor_loss(
-    actor: ActorMLP,
+    actor: VectorizedActor,
     cfg: _TrainingConfig,
     rollout: Rollout,
     advantages: jax.Array,
@@ -108,7 +109,7 @@ def _mb_actor_loss(
 
     #_LOGGER.debug(f"Obs minibatch: {b_obs.shape}, Action minibatch: {b_actions.shape}, Logprob minibatch: {b_logprobs.shape}")
 
-    logprob, entropy = actor.get_action_log_probs(b_obs, action=b_actions)
+    logprob, entropy = actor.get_action_log_probs(b_obs, actions=b_actions)
 
     log_ratio = (logprob - b_logprobs).flatten()
     ratio = jnp.exp(log_ratio)
@@ -125,7 +126,7 @@ def _mb_actor_loss(
 
 @nnx.jit
 def mb_loss(
-    actor_critic: ActorCritic,
+    actor_critic: VecActorQDCritic,
     cfg: _TrainingConfig,
     rollout: Rollout,
     advantages: jax.Array,
@@ -140,7 +141,7 @@ def mb_loss(
 
 @nnx.scan(in_axes=(nnx.Carry, None, None, None, None, 0), out_axes=(nnx.Carry, 0, 0, 0, 0, 0, 0, 0))
 def _train_epoch(
-    state: State,
+    state: TrainState,
     cfg: _TrainingConfig,
     rollout: Rollout,
     advantages: jax.Array,
@@ -191,7 +192,7 @@ def _train_epoch(
 #     return state, normed_returns
 
 def batch_update(
-    state: State,
+    state: TrainState,
     cfg: _TrainingConfig,
     rollout: Rollout,
     *,
@@ -201,7 +202,7 @@ def batch_update(
 
     @nnx.jit(static_argnums=(1,))
     def _batch_update(
-        state: State,
+        state: TrainState,
         cfg: _TrainingConfig,
         rollout: Rollout
     ) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
@@ -227,8 +228,8 @@ def batch_update(
         # TODO: JAXIFY
         def _update_epoch(
             e: int,
-            carry: Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]
-        ) -> Tuple[State, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array,jax.Array, jax.Array]]:
+            carry: Tuple[TrainState, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]]
+        ) -> Tuple[TrainState, _TrainingConfig, Rollout, jax.Array, jax.Array, jax.Array, Tuple[jax.Array, jax.Array, jax.Array, jax.Array,jax.Array, jax.Array]]:
             state, cfg, rollout, advantages, returns, mb_idxs, (pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio) = carry
             state, _, _pg_loss, _v_loss, _entropy_loss, _approx_kl, _clipfracs, _ratio = train_step_fn(state, cfg, rollout, advantages, returns, mb_idxs)
             pg_loss = pg_loss.at[e].set(_pg_loss)
@@ -275,11 +276,21 @@ def train(
     key, reset_key = jax.random.split(key, 2)
     next_obs, env_state = vmap_reset(jax.random.split(reset_key, cfg.num_envs), env_params)
 
+    vec_actor = VectorizedActor(state.actor, cfg.num_measures + 1, key=key)
+    actor_critic = VecActorQDCritic(vec_actor, state.qd_critic)
+    train_state = TrainState(
+        actor_critic,
+        optax.chain(
+            optax.clip_by_global_norm(max_norm=cfg.max_grad_norm),
+            optax.adam(learning_rate=cfg.lr)
+        ),
+    )
+
     if len(next_obs.shape) == 1:
         next_obs = jnp.expand_dims(next_obs, axis=0)
 
     if cfg.normalize_obs:
-        next_obs = state.actor_critic.actor.normalize_obs(next_obs)
+        next_obs = train_state.model.actor.normalize_obs(next_obs)
 
     if eval_callback is None:
         eval_callback = _default_eval_callback
@@ -289,17 +300,17 @@ def train(
     num_updates = cfg.total_timesteps //  cfg.rollout_len * cfg.num_envs * num_train_per_eval
     _LOGGER.info(f"Training for {num_updates} updates")
 
-    state.global_step = 0
+    train_state.global_step = 0
     def _train_eval(
         e: int,
-        train_eval_carry: Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
-    ) -> Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
-        state, env_state, next_obs, total_rewards, ep_len, key = train_eval_carry
+        train_eval_carry: Tuple[TrainState, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
+    ) -> Tuple[TrainState, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
+        train_state, env_state, next_obs, total_rewards, ep_len, key = train_eval_carry
         def _train(
             t: int,
-            train_carry: Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
-        ) -> Tuple[State, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
-            state, env_state, next_obs, total_rewards, ep_len, key = train_carry
+            train_carry: Tuple[TrainState, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]
+        ) -> Tuple[TrainState, Dict[str, Any], jax.Array, jax.Array, jax.Array, jax.Array]:
+            train_state, env_state, next_obs, total_rewards, ep_len, key = train_carry
             with jax.profiler.TraceAnnotation("collect_rollout"):
                 rollout = make_empty_rollout(
                     cfg.rollout_len,
@@ -313,16 +324,16 @@ def train(
                 @nnx.jit
                 def _rollout_step(
                     step: int,
-                    rollout_carry: Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
-                ) -> Tuple[State, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
-                    (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = rollout_carry
-                    state.global_step += cfg.num_envs
+                    rollout_carry: Tuple[TrainState, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]
+                ) -> Tuple[TrainState, Rollout, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
+                    (train_state, rollout, next_obs, env_state, total_rewards, ep_len, key) = rollout_carry
+                    train_state.global_step += cfg.num_envs
 
                     _obs = rollout.obs.at[step].set(next_obs)
 
                     key, action_key, env_step_key = jax.random.split(key, 3)
 
-                    action, logprob, _ = state.actor_critic.actor.get_action(next_obs, key=action_key)
+                    action, logprob, _ = train_state.model.actor.get_action(next_obs, key=action_key)
                     #_LOGGER.debug(f"Action: {action.shape}, logprob {logprob.shape}")
                     # if discrete:
                         # action =
@@ -333,7 +344,7 @@ def train(
 
                     #_LOGGER.debug(f"Value: {value.shape}")
 
-                    value = state.actor_critic.critic(next_obs)
+                    value = train_state.model.critic(next_obs)
                     _values = rollout.values.at[step].set(value)
 
                     next_obs, env_state, reward, dones, infos = vmap_step(
@@ -348,13 +359,13 @@ def train(
 
                     if cfg.normalize_obs:
                         # Need this indirection so that state can be mutated in ActorMLP
-                        next_obs = state.actor_critic.actor.normalize_obs(next_obs)
+                        next_obs = train_state.model.actor.normalize_obs(next_obs)
 
                     _truncated = rollout.truncated.at[step].set(jnp.expand_dims(infos["truncation"], axis=-1))
                     _dones = rollout.dones.at[step].set(jnp.expand_dims(dones, axis=-1))
 
                     if cfg.normalize_rewards:
-                        reward = state.actor_critic.actor.normalize_rewards(reward)
+                        reward = train_state.model.actor.normalize_rewards(reward)
 
                     reward = jnp.expand_dims(reward, axis=-1)
                     #_LOGGER.debug(f"Reward: {reward.shape}")
@@ -375,23 +386,23 @@ def train(
                         values=_values,
                     )
 
-                    return state, rollout, next_obs, env_state, total_rewards, ep_len, key
+                    return train_state, rollout, next_obs, env_state, total_rewards, ep_len, key
 
-                (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
+                (train_state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
                     0,
                     cfg.rollout_len,
                     _rollout_step,
-                    (state, rollout, next_obs, env_state, total_rewards, ep_len, key)
+                    (train_state, rollout, next_obs, env_state, total_rewards, ep_len, key)
                 )
 
-            state.rollout_metrics.update(train_reward=total_rewards)
+            train_state.rollout_metrics.update(train_reward=total_rewards)
 
             flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
             #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
 
             with jax.profiler.TraceAnnotation("training_loop"):
                 (state, pg_loss, v_loss, entropy_loss, approx_kl, clipfrac, ratio) = batch_update(
-                    state,
+                    train_state,
                     training_cfg,
                     flattened_rollout,
                     calculate_returns_fn=_calculate_gae,
@@ -407,38 +418,40 @@ def train(
 
             return state, env_state, next_obs, total_rewards, ep_len, key
 
-        eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
-        state.eval_metrics.update(
+        eval_result, eval_rollout = eval(train_state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
+        train_state.eval_metrics.update(
             reward=eval_result.returns,
             ep_len=eval_result.lengths,
         )
-        eval_callback(state, cfg, eval_result, eval_rollout)
-        state.train_metrics.reset()
-        state.eval_metrics.reset()
+        eval_callback(train_state, cfg, eval_result, eval_rollout)
+        train_state.train_metrics.reset()
+        train_state.eval_metrics.reset()
 
         (state, env_state, next_obs, total_rewards, ep_len, key) = nnx.fori_loop(
             0,
             num_train_per_eval,
             _train,
-            (state, env_state, next_obs, jnp.zeros_like(total_rewards), ep_len, key)
+            (train_state, env_state, next_obs, jnp.zeros_like(total_rewards), ep_len, key)
         )
 
-        return state, env_state, next_obs, total_rewards, ep_len, key
+        return train_state, env_state, next_obs, total_rewards, ep_len, key
 
-    state, env_state, next_obs, total_rewards, ep_len, key = nnx.fori_loop(
+    train_state, env_state, next_obs, total_rewards, ep_len, key = nnx.fori_loop(
         0,
         num_updates,
         _train_eval,
-        (state, env_state, next_obs, total_rewards, ep_len, key)
+        (train_state, env_state, next_obs, total_rewards, ep_len, key)
     )
 
-    eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
-    state.eval_metrics.update(
+    eval_result, eval_rollout = eval(train_state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
+    train_state.eval_metrics.update(
         train_reward=total_rewards,
         reward=eval_result.returns,
         ep_len=eval_result.lengths,
     )
-    eval_callback(state, cfg, eval_result, eval_rollout)
-    state.train_metrics.reset()
-    state.eval_metrics.reset()
+    eval_callback(train_state, cfg, eval_result, eval_rollout)
+    train_state.train_metrics.reset()
+    train_state.eval_metrics.reset()
+
+    state.actor = train_state.model.actor.unpack_actors()[0]
     return state, eval_result
