@@ -1,16 +1,18 @@
+import copy
 import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import jax
-import jax.numpy as jnp
 import orbax.checkpoint as ocp
 import tomli_w
 from flax import struct
+from rejax.algos import Algorithm
 
 from viberl.utils._readable_hash import generate_phrase_hash
-from viberl.utils.types import EvalCallback, PolicyEvalResult
+from viberl.utils.types import PolicyEvalResult
+from viberl.utils._eval_callbacks import EvalCallback
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,11 +29,13 @@ def generate_checkpointer_options(
 
 
 def load_ckpt(
-    state: struct.PyTreeNode,
-    experiment_path: str,
-    *,
+    algo: Algorithm,
+    ckpt_dir: str,
+    experiment_name: str,
+    key: Optional[jax.Array] = None,
     run_name: Optional[str] = None,
     step: str | int = "best",
+    rng: Optional[jax.Array] = None,
 ) -> struct.PyTreeNode:
     """Load a model checkpoint from disk.
 
@@ -45,45 +49,49 @@ def load_ckpt(
         struct.PyTreeNode: Loaded model checkpoint state
     """
     options = generate_checkpointer_options()
+    if key is not None:
+        ts = algo.init_state(key)
+    elif rng is not None:
+        rng, _key = jax.random.split(rng)
+        ts = algo.init_state(jax.random.key_data(_key))
+    elif rng is None and key is None:
+        raise ValueError("Either key or rng must be provided")
 
-    if run_name is not None:
+    if key is not None and run_name is not None:
+        raise ValueError("Both key and name cannot be provided")
+    elif key is not None:
+        id = jax.random.key_data(key)
+        phrase_hash = generate_phrase_hash(id[1])
+    elif run_name is not None:
         # TODO: Use the run_name but still generate an acceptable TrainState
         phrase_hash = run_name
     else:
-        phrase_hash = generate_phrase_hash(state.actor_critic.actor.id[1])
+        raise ValueError("Either key or run_name must be provided")
 
-    if not experiment_path.startswith("/"):
-        ckpt_dir_path = Path(os.getcwd()) / experiment_path
+    if not ckpt_dir.startswith("/"):
+        ckpt_dir_path = Path(os.getcwd()) / ckpt_dir
     else:
-        ckpt_dir_path = Path(experiment_path)
+        ckpt_dir_path = Path(ckpt_dir)
 
-    ts = state._generate_checkpoint()
-    ts = jax.tree_util.tree_map(jnp.zeros_like, ts)
-    abstract_ts = jax.tree_util.tree_map(
-        ocp.utils.to_shape_dtype_struct, ts
-    )
-    flat_ts, treedef = jax.tree_util.tree_flatten(abstract_ts)
-    restore_args = ocp.args.StandardRestore(flat_ts)
-    with jax.default_device(jax.devices("gpu")[0] if jax.default_backend() == 'gpu' else jax.devices("cpu")[0]):
+    with jax.default_device(jax.devices("gpu")[0]):
         with ocp.CheckpointManager(
-            ckpt_dir_path / phrase_hash,
-            options=options
+            ckpt_dir_path / experiment_name / phrase_hash, options=options
         ) as ocp_checkpointer:
             if step == "best":
                 train_state = ocp_checkpointer.restore(
-                    ocp_checkpointer.best_step(), args=restore_args
+                    ocp_checkpointer.best_step(), args=ocp.args.StandardRestore(ts)
                 )
             elif step == "latest":
                 train_state = ocp_checkpointer.restore(
-                    ocp_checkpointer.latest_step(), args=restore_args
+                    ocp_checkpointer.latest_step(), args=ocp.args.StandardRestore(ts)
                 )
             elif isinstance(step, int):
                 train_state = ocp_checkpointer.restore(
-                    step, args=restore_args
+                    step, args=ocp.args.StandardRestore(ts)
                 )
             elif isinstance(step, str) and step.isdigit():
                 train_state = ocp_checkpointer.restore(
-                    int(step), args=restore_args
+                    int(step), args=ocp.args.StandardRestore(ts)
                 )
             else:
                 raise ValueError(
@@ -92,7 +100,7 @@ def load_ckpt(
 
         _LOGGER.info(f"Loaded checkpoint {step} for {phrase_hash}: {train_state}")
 
-    return jax.tree_util.tree_unflatten(treedef, train_state)
+    return train_state
 
 
 def create_checkpointer(
@@ -123,14 +131,14 @@ def create_checkpointer(
     exp_path.mkdir(parents=True, exist_ok=True)
 
     def checkpointer(
-        state: struct.PyTreeNode,
-        cfg: struct.PyTreeNode,
+        algo: Algorithm,
+        train_state: struct.PyTreeNode,
+        key: jax.Array,
         eval_results: PolicyEvalResult,
-        rollout: struct.PyTreeNode,
     ) -> Tuple:
         def create_checkpoint(
             current_step: int,
-            t: Dict[str, struct.PyTreeNode],
+            t: struct.PyTreeNode,
             e: PolicyEvalResult,
             id: jax.Array,
             total_timesteps: int,
@@ -143,7 +151,7 @@ def create_checkpointer(
             ) as ocp_checkpointer:
                 ocp_checkpointer.save(
                     current_step,
-                    args=ocp.args.StandardSave(jax.tree_util.tree_flatten(t)[0]),
+                    args=ocp.args.StandardSave(t),
                     metrics={
                         "mean_returns": e.returns.mean().item(),
                         "mean_lengths": e.lengths.mean().item(),
@@ -154,11 +162,11 @@ def create_checkpointer(
         jax.experimental.io_callback(
             create_checkpoint,
             (),
-            state.global_step,
-            state._generate_checkpoint(),
+            train_state.global_step,
+            train_state,
             eval_results,
-            state.actor_critic.actor.id,
-            cfg.total_timesteps,
+            copy.deepcopy(train_state.seed),
+            algo.total_timesteps,
         )
 
         return ()

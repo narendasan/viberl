@@ -12,3 +12,4 @@ logs/
 mlruns/
 .mypy_cache/
 .ropeproject/
+*.nsys-rep

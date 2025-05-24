@@ -1,8 +1,8 @@
-import os
-
 import logging
 import logging.config
+import os
 from typing import Any, Dict
+
 import absl.logging
 
 absl.logging.set_verbosity(absl.logging.WARNING)
@@ -16,7 +16,7 @@ def setup_logger(config: Dict[str, Any]) -> None:
     )
     logging.config.dictConfig({
             "version": 1,
-            "disable_existing_loggers": True if lvl != logging.DEBUG else False,
+            "disable_existing_loggers": False,
             "formatters": {
                 "brief": {
                     "format": "%(asctime)s - %(levelname)s - %(message)s",
@@ -51,5 +51,6 @@ def setup_logger(config: Dict[str, Any]) -> None:
         })
 
     logging.getLogger("jax._src.xla_bridge").propagate = False
+    logging.getLogger("jax._src").propagate = False
     logging.getLogger("absl").propagate = False
     return

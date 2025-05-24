@@ -1,14 +1,18 @@
 import copy
 from typing import Any, Dict, Tuple
 
+import logging
+
 import jax
 from flax import struct
-from rejax.algos import Algorithm
 
 import wandb
 from viberl.utils._readable_hash import generate_phrase_hash
 from viberl.utils.types import EvalCallback, PolicyEvalResult
 
+_LOGGER = logging.getLogger(__name__)
+
+_WANDB_INSTANCES = {}
 
 def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """Create a callback for logging to Weights & Biases.
@@ -27,37 +31,53 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
     """
     config = copy.deepcopy(config)
 
+
     def wandb_logger(
-        a: Algorithm,
-        train_state: struct.PyTreeNode,
-        key: jax.Array,
+        state: struct.PyTreeNode,
+        cfg: struct.PyTreeNode,
         eval_results: PolicyEvalResult,
+        rollout: struct.PyTreeNode,
     ) -> Tuple:
         def log(id: jax.Array, step: jax.Array, data: Dict[str, float]) -> None:
-            wandb.init(  # type: ignore
-                project="rl-sandbox",
-                group=config["experiment"]["experiment_name"],
-                tags=config["experiment"]["tags"],
-                config=config,
-                resume="allow",
-                reinit=True,
-                id=f"{generate_phrase_hash(id[1])}-{config['experiment']['experiment_name']}",
-            )
+            phrase_id = generate_phrase_hash(id[1])
+            if phrase_id not in _WANDB_INSTANCES:
+                run = wandb.init(  # type: ignore
+                    project="viberl",
+                    group=config["experiment"]["experiment_name"],
+                    tags=config["experiment"]["tags"],
+                    config=config,
+                    resume="allow",
+                    reinit="create_new",
+                    id=f"{phrase_id}_{config['experiment']['experiment_name']}",
+                )
+                _WANDB_INSTANCES[phrase_id] = run
+            else:
+                run = _WANDB_INSTANCES[phrase_id]
             # io_callback returns np.array, which wandb does not like.
             # In jax 0.4.27, this becomes a jax array, should check when upgrading...
             step = step.item()
-            wandb.log(data, step=step)  # type: ignore
-            wandb.finish()  # type: ignore
+            run.log(data, step=step)  # type: ignore
+
+        train_metrics = state.train_metrics.compute()
+        eval_metrics = state.eval_metrics.compute()
+        rollout_metrics = state.rollout_metrics.compute()
+
+        metrics = {
+                f"training/{key}": value for key, value in train_metrics.items()
+            } | {
+                f"eval/{key}": value for key, value in eval_metrics.items()
+            } | {
+                f"rollout/{key}": value for key, value in rollout_metrics.items()
+            }
+
+        _LOGGER.debug(metrics)
 
         jax.experimental.io_callback(
             log,
             (),  # result_shape_dtypes (wandb.log returns None)
-            copy.deepcopy(train_state.seed),
-            train_state.global_step,
-            {
-                "mean_episode_length": eval_results.lengths.mean(),
-                "mean_return": eval_results.returns.mean(),
-            },
+            copy.deepcopy(state.actor_critic.actor.id),
+            state.global_step,
+            metrics,
         )
 
         # Since we log to wandb, we don't want to return anything that is collected

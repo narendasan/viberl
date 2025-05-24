@@ -48,7 +48,7 @@ def render_gymnax(
     return vis, cum_reward
 
 
-def render_brax(
+def render_brax_rejax(
     policy: Callable[[jax.Array, jax.Array], Tuple],
     config: Dict[str, Any],
     key: jax.Array,
@@ -69,6 +69,30 @@ def render_brax(
         rollout.append(state.pipeline_state)
         act_rng, rng = jax.random.split(key)
         act = policy(state.obs, act_rng)
+        state = jit_env_step(state, act)
+
+    return rollout, env, reward
+
+def render_brax(
+    policy: Callable[[jax.Array, jax.Array], Tuple],
+    env_name: str,
+    key: jax.Array,
+    steps: int = 10000,
+) -> Tuple[List, brax_envs.Env, float]:
+    env = brax_envs.create(
+        env_name=env_name.split("/")[1],
+    )
+    jit_env_reset = jax.jit(env.reset)
+    jit_env_step = jax.jit(env.step)
+
+    rollout = []
+    state = jit_env_reset(rng=key)
+    reward = 0
+    for _ in range(steps):
+        reward += state.reward
+        rollout.append(state.pipeline_state)
+        act_rng, rng = jax.random.split(key)
+        act = policy(jnp.expand_dims(state.obs, axis=0), act_rng)
         state = jit_env_step(state, act)
 
     return rollout, env, reward

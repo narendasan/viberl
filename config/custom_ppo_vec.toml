@@ -1,0 +1,40 @@
+[experiment]
+name = "custom_ppo_experiment_vectorized_1"
+root_seed = 42
+num_agent_seeds = 16
+ckpt_dir = "ckpts"
+tags = ["test", "vectorized"]
+algorithm = "ppo"
+max_ckpt_to_keep = 5
+results_dir = "results"
+log_dir = "logs"
+log_level = "DEBUG"
+
+[algorithm]
+actor_lr = 3e-4
+critic_lr = 3e-4
+actor_hidden_dims = [128, 128]
+critic_hidden_dims = [128, 128]
+actor_activation_fn = "tanh"
+critic_activation_fn = "tanh"
+gamma = 0.99
+gae_lambda = 0.95
+num_minibatches = 2
+num_update_epochs = 16
+normalize_advantages = true     #true
+surrogate_clip_coef = 0.2
+clip_v_loss = true
+v_clip_coef = 0.2
+entropy_coef = 0.01
+v_coef = 0.5
+actor_max_grad_norm = 10
+critic_max_grad_norm = 10
+target_kl = 0.0
+normalize_obs = true            #true
+normalize_returns = true        #true
+v_bootstrap = false
+weight_decay = 0.0
+rollout_len = 128
+total_timesteps = 10_000_000
+num_envs = 128
+eval_frequency = 1

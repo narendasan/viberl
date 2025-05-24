@@ -1,0 +1,39 @@
+[experiment]
+name = "custom_ppo_experiment_walker2d"
+root_seed = 1111
+num_agent_seeds = 16
+ckpt_dir = "ckpts"
+tags = ["test", "walker2d"]
+algorithm = "ppo"
+max_ckpt_to_keep = 5
+results_dir = "results"
+log_dir = "logs"
+log_level = "INFO"
+env_name = "brax/walker2d"
+
+[algorithm]
+lr = 3e-4
+actor_hidden_dims = [128, 128]
+critic_hidden_dims = [128, 128]
+actor_activation_fn = "tanh"
+critic_activation_fn = "tanh"
+gamma = 0.99
+gae_lambda = 0.95
+num_minibatches = 1
+num_update_epochs = 10
+normalize_advantages = false    #true
+surrogate_clip_coef = 0.2
+clip_v_loss = true
+v_clip_coef = 0.5
+entropy_coef = 0.0
+v_coef = 2.0
+max_grad_norm = 0.5
+target_kl = 0.008
+normalize_obs = true            #true
+normalize_rewards = false       #true
+v_bootstrap = true
+weight_decay = 0.0
+rollout_len = 2048
+total_timesteps = 1_000_000
+num_envs = 1
+eval_frequency = 20480
