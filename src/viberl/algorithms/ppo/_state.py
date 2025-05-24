@@ -27,6 +27,7 @@ class State:
     actor_critic: ActorCritic
     train_metrics: nnx.MultiMetric
     eval_metrics: nnx.MultiMetric
+    rollout_metrics: nnx.MultiMetric
     optimizer: nnx.Optimizer
     global_step: int = 0
 
@@ -94,10 +95,14 @@ class State:
             ratio_max=nnx.metrics.Average("ratio_max"),
         )
 
+        rollout_metrics = nnx.MultiMetric(
+            reward=nnx.metrics.Average("train_reward"),
+        )
+
+
         eval_metrics = nnx.MultiMetric(
             reward=nnx.metrics.Average("reward"),
             ep_len=nnx.metrics.Average("ep_len"),
-            train_reward=nnx.metrics.Average("train_reward"),
         )
 
         optimizer = nnx.Optimizer(
@@ -111,6 +116,7 @@ class State:
             actor_critic=actor_critic,
             train_metrics=train_metrics,
             eval_metrics=eval_metrics,
+            rollout_metrics=rollout_metrics,
             optimizer=optimizer,
         )
 

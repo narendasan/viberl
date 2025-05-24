@@ -60,8 +60,16 @@ def create_wandb_logger(config: Dict[str, Any]) -> EvalCallback:
 
         train_metrics = state.train_metrics.compute()
         eval_metrics = state.eval_metrics.compute()
+        rollout_metrics = state.rollout_metrics.compute()
 
-        metrics = {f"training/{key}": value for key, value in train_metrics.items()} | {f"eval/{key}": value for key, value in eval_metrics.items()}
+        metrics = {
+                f"training/{key}": value for key, value in train_metrics.items()
+            } | {
+                f"eval/{key}": value for key, value in eval_metrics.items()
+            } | {
+                f"rollout/{key}": value for key, value in rollout_metrics.items()
+            }
+
         _LOGGER.debug(metrics)
 
         jax.experimental.io_callback(

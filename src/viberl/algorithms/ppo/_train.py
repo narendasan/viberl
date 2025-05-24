@@ -384,6 +384,8 @@ def train(
                     (state, rollout, next_obs, env_state, total_rewards, ep_len, key)
                 )
 
+            state.rollout_metrics.update(train_reward=total_rewards)
+
             flattened_rollout = flatten_vec_rollout(rollout, env.observation_space(env_params).shape, env.action_space(env_params).shape)
             #_LOGGER.debug(f"Flattened Rollout: {flattened_rollout.shapes}")
 
@@ -407,7 +409,6 @@ def train(
 
         eval_result, eval_rollout = eval(state, eval_cfg, env_info[1], vmap_reset, vmap_step, key, collect_values=False)
         state.eval_metrics.update(
-            train_reward=total_rewards,
             reward=eval_result.returns,
             ep_len=eval_result.lengths,
         )

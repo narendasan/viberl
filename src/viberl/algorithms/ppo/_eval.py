@@ -54,9 +54,7 @@ def eval(
 
     def _cond_fn(carry: Tuple[State, Rollout, Dict[str, Any], jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]) -> bool:
         state, rollout, env_state, next_obs, dones, step, total_rewards, ep_len, key = carry
-        return jnp.logical_and(
-            jnp.all(step < cfg.rollout_len), jnp.logical_not(jnp.all(dones))
-        )
+        return  jnp.all(step < cfg.rollout_len)
 
     def _body_fn(
         carry: Tuple[State, Rollout, Dict[str, Any], jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]
