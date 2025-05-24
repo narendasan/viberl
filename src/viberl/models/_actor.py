@@ -18,8 +18,6 @@ class ActorMLP(nnx.Module):
         *,
         hidden_dims: Sequence[int] = [128, 128],
         activation_fn: Callable | str = nnx.tanh,
-        normalize_obs: bool = False,
-        normalize_rewards: bool = False,
         normalize_epsilon: float = 1e-8,
         rngs:nnx.Rngs=nnx.Rngs(0)
     ):
@@ -140,6 +138,7 @@ class VectorizedActor(object):
         self,
         actor: ActorMLP,
         num_replicas: int,
+        normalize_epsilon: float=1e-8,
         *,
         key: jax.Array
     ):
@@ -148,10 +147,16 @@ class VectorizedActor(object):
         self.action_shape = actor.action_shape
         self.hidden_dims = actor.hidden_dims
         self.activation_fn = actor.activation_fn
-        self.normalize_obs = actor.normalize_obs
-        self.normalize_returns = actor.normalize_returns
         self.root_key = key
         self.num_replicas = num_replicas
+
+        self.obs_mean = nnx.Variable(jnp.ones(self.obs_shape), )
+        self.obs_var = nnx.Variable(jnp.ones(self.obs_shape))
+        self.obs_count = nnx.Variable(jnp.ones((1,)))
+        self.rewards_mean = nnx.Variable(jnp.ones(1,))
+        self.rewards_var = nnx.Variable(jnp.ones((1,)))
+        self.rewards_count = nnx.Variable(jnp.ones((1,)))
+        self.normalize_eps = normalize_epsilon
 
         state_stack = [nnx.state(actor) for _ in range(self.num_replicas)]
         vectorized_state = tree_stack(state_stack)
@@ -163,8 +168,6 @@ class VectorizedActor(object):
                 self.action_shape,
                 hidden_dims=self.hidden_dims,
                 activation_fn=self.activation_fn,
-                normalize_obs=self.normalize_obs,
-                normalize_returns=self.normalize_returns,
                 rngs=nnx.Rngs(key)
             )
 
@@ -210,24 +213,6 @@ class VectorizedActor(object):
 
         self._vec_get_action_log_probs = vec_get_action_log_probs
 
-        @nnx.vmap(in_axes=0, out_axes=0, axis_size=self.num_replicas)
-        def vec_normalize_obs(
-            replicas: ActorMLP,
-            batch: jax.Array,
-        ) -> jax.Array:
-            return replicas.normalize_obs(batch)
-
-        self._vec_normalize_obs = vec_normalize_obs
-
-        @nnx.vmap(in_axes=0, out_axes=0, axis_size=self.num_replicas)
-        def vec_normalize_returns(
-            replicas: ActorMLP,
-            batch: jax.Array,
-        ) -> jax.Array:
-            return replicas.normalize_returns(batch)
-
-        self._vec_normalize_returns = vec_normalize_returns
-
     def __call__(self, obs: jax.Array) -> jax.Array:
         return self._vec_mean_action(self._actor_replicas, obs)
 
@@ -251,17 +236,17 @@ class VectorizedActor(object):
         """
         return self._vec_get_action_log_probs(self._actor_replicas, obs, actions)
 
-    def normalize_obs(
-        self,
-        batch: jax.Array,
-    ) -> jax.Array:
-        return self._vec_normalize_obs(self._actor_replicas, batch)
+    def normalize_obs(self, batch: jax.Array) -> jax.Array:
+        self.obs_mean.value, self.obs_var.value, self.obs_count.value = ActorMLP._update_running_stats(
+            batch, self.obs_mean.value, self.obs_var.value, self.obs_count.value
+        )
+        return (batch - self.obs_mean) / jnp.sqrt(self.obs_var + self.normalize_eps)
 
-    def normalize_returns(
-        self,
-        batch: jax.Array,
-    ) -> jax.Array:
-        return self._vec_normalize_returns(self._actor_replicas, batch)
+    def normalize_rewards(self, batch: jax.Array) -> jax.Array:
+        self.rewards_mean.value, self.rewards_var.value, self.rewards_count.value = ActorMLP._update_running_stats(
+            batch, self.rewards_mean.value, self.rewards_var.value, self.rewards_count.value
+        )
+        return jax.lax.clamp(-5.0, (batch - self.rewards_mean) / jnp.sqrt(self.rewards_var + self.normalize_eps), 5.0)
 
     def unpack_actors(self) -> Sequence[ActorMLP]:
         return unstack_modules(
@@ -272,8 +257,6 @@ class VectorizedActor(object):
             module_init_kwargs=[{
                 "hidden_dims": self.hidden_dims,
                 "activation_fn": self.activation_fn,
-                "normalize_obs": self.normalize_obs,
-                "normalize_returns": self.normalize_returns,
                 "rngs": nnx.Rngs(k)
             } for k in self._replica_keys]
         )
