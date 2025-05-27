@@ -374,6 +374,9 @@ def train(
                         values=_values,
                     )
 
+                    total_rewards = total_rewards.at[jnp.where(dones == 1, 1, dones)].set(0)
+                    ep_len = ep_len.at[jnp.where(dones == 1, 1, dones)].set(0)
+
                     return state, rollout, next_obs, env_state, total_rewards, ep_len, key
 
                 (state, rollout, next_obs, env_state, total_rewards, ep_len, key) = nnx.fori_loop(
