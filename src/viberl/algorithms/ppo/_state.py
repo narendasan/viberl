@@ -1,3 +1,4 @@
+from sched import scheduler
 import logging
 from typing import Tuple, Dict, Any, Self, Callable
 
@@ -90,6 +91,7 @@ class State:
             explained_var=nnx.metrics.Average("explained_var"),
             ratio_min=nnx.metrics.Average("ratio_min"),
             ratio_max=nnx.metrics.Average("ratio_max"),
+            lr=nnx.metrics.Average("lr")
         )
 
         rollout_metrics = nnx.MultiMetric(
@@ -102,11 +104,21 @@ class State:
             ep_len=nnx.metrics.Average("ep_len"),
         )
 
+        num_train_per_eval = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
+        assert num_train_per_eval > 0, "Eval Frequency must be >= Rollout Len * Num Envs"
+        num_updates = cfg.total_timesteps //  (cfg.rollout_len * cfg.num_envs)
+        num_grad_updates = num_updates * cfg.num_update_epochs * cfg.num_minibatches
+        lr_schedule = optax.linear_schedule(cfg.lr, cfg.lr * 0.0001, num_grad_updates) if cfg.use_lr_schedule else cfg.lr
+
+        @optax.inject_hyperparams
+        def optimizer_chain(lr_schedule):
+          return optax.chain(
+              optax.clip_by_global_norm(max_norm=cfg.max_grad_norm),
+              optax.adam(learning_rate=lr_schedule)
+          )
+
         optimizer = nnx.Optimizer(
-            actor_critic, optax.chain(
-                optax.clip_by_global_norm(max_norm=cfg.max_grad_norm),
-                optax.adam(learning_rate=cfg.lr)
-            )
+            actor_critic, optimizer_chain(lr_schedule)
         )
 
         return cls(

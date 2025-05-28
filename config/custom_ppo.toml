@@ -13,6 +13,7 @@ env_name = "brax/walker2d"
 
 [algorithm]
 lr = 3e-4
+use_lr_schedule = true
 actor_hidden_dims = [128, 128]
 critic_hidden_dims = [128, 128]
 actor_activation_fn = "tanh"
@@ -34,6 +35,7 @@ normalize_rewards = false       #true
 v_bootstrap = true
 weight_decay = 0.0
 rollout_len = 2048
-total_timesteps = 1_000_000
+total_timesteps = 3_000_000
 num_envs = 1
-eval_frequency = 20480
+eval_frequency = 2048
+eval_episodes = 10

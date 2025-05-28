@@ -35,6 +35,8 @@ def _calculate_gae(state: State, cfg: _TrainingConfig, rollout: Rollout) -> Tupl
     last_value = state.actor_critic.critic(last_obs)
     last_done = rollout.dones[-1, :]
     #last_value = jnp.where(rollout.dones[-1, :], 0, last_value)
+    if cfg.v_bootstrap:
+        rollout.rewards = rollout.rewards + cfg.gamma * rollout.dones * rollout.truncated * rollout.values
 
     def _calculate_advantages(carry: Tuple[jax.Array, jax.Array, jax.Array], r: Rollout) -> Tuple[Tuple[jax.Array, jax.Array, jax.Array], jax.Array]:
         next_advantage, next_value, next_done = carry
@@ -134,7 +136,7 @@ def mb_loss(
     pg_loss, entropy_loss, approx_kl, clipfracs, ratio = _mb_actor_loss(actor_critic.actor, cfg, rollout, advantages, mb_idxs)
     value_loss = _mb_critic_loss(actor_critic.critic, cfg, rollout, returns, mb_idxs)
     loss = pg_loss + entropy_loss * cfg.entropy_coef + value_loss * cfg.v_coef
-    return loss, (pg_loss, value_loss, entropy_loss, approx_kl, clipfracs, ratio)
+    return loss, (pg_loss, value_loss, entropy_loss, jax.lax.stop_gradient(approx_kl), jax.lax.stop_gradient(clipfracs), jax.lax.stop_gradient(ratio))
 
 
 @nnx.scan(in_axes=(nnx.Carry, None, None, None, None, 0), out_axes=(nnx.Carry, 0, 0, 0, 0, 0, 0, 0))
@@ -172,7 +174,8 @@ def _train_epoch(
         clipfrac=clipfracs,
         explained_var=explained_var,
         ratio_min=ratio_min,
-        ratio_max=ratio_max
+        ratio_max=ratio_max,
+        lr=state.optimizer.opt_state.hyperparams['lr_schedule']
     )
     # Grad clipping is part of the optimizer
     state.optimizer.update(grads)
@@ -285,7 +288,8 @@ def train(
 
     num_train_per_eval = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
     assert num_train_per_eval > 0, "Eval Frequency must be >= Rollout Len * Num Envs"
-    num_updates = cfg.total_timesteps //  cfg.rollout_len * cfg.num_envs * num_train_per_eval
+    num_updates = (cfg.total_timesteps //  (cfg.rollout_len * cfg.num_envs)) // num_train_per_eval
+
     _LOGGER.info(f"Training for {num_updates} updates")
 
     state.global_step = 0
@@ -341,6 +345,8 @@ def train(
                         action,
                         env_params
                     )
+
+                    dones = jnp.logical_or(dones, infos["truncation"])
 
                     if len(next_obs.shape) == 1:
                         next_obs = jnp.expand_dims(next_obs, axis=0)
