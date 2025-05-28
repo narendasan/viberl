@@ -182,16 +182,6 @@ def _train_epoch(
 
     return state, loss, pg_loss, v_loss, entropy_loss, approx_kl, clipfracs, ratio
 
-# @nnx.scan(in_axes=(nnx.Carry, 0), out_axes=(nnx.Carry, 0))
-# def _normalize_returns_by_step(state: State, returns: jax.Array) -> Tuple[State, jax.Array]:
-#     jax.experimental.io_callback(
-#         lambda r: _LOGGER.debug(f"returns: {r.shape}"),
-#         None,
-#         returns
-#     )
-#     normed_returns = state.actor.normalize_returns(returns)
-#     return state, normed_returns
-
 def batch_update(
     state: State,
     cfg: _TrainingConfig,
@@ -209,16 +199,8 @@ def batch_update(
     ) -> Tuple[State, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array, jax.Array]:
         advantages, returns = jax.lax.stop_gradient(calculate_returns_fn(state, cfg, rollout))
 
-        # state, returns = nnx.cond(
-        #     cfg.normalize_returns,
-        #     lambda s, r: _normalize_returns_by_step(s, r),
-        #     lambda s, r: (s, r),
-        #     state, _returns
-        # )
-
         batch_size = rollout.obs.shape[0]
         minibatch_size = batch_size // cfg.num_minibatches
-        #_LOGGER.debug(f"Batch size: {batch_size}, minibatch size: {minibatch_size}")
 
         batch_idxs = jnp.arange(batch_size)
         mb_idxs = batch_idxs.reshape(-1, minibatch_size)

@@ -1,3 +1,4 @@
+from sched import scheduler
 import logging
 from typing import Tuple, Dict, Any, Self, Callable
 
@@ -60,8 +61,6 @@ class State:
             hidden_dims=cfg.actor_hidden_dims,
             activation_fn=cfg.actor_activation_fn,
         )
-
-
         _LOGGER.info(f"Actor network {actor}")
 
         qd_critic = QDCritic(obs_shape, hidden_dims=cfg.critic_hidden_dims, activation_fn=cfg.critic_activation_fn, num_critics=cfg.num_measures + 1, key=qd_critic_key)
@@ -116,6 +115,7 @@ class TrainState(nnx.Optimizer):
             explained_var=nnx.metrics.Average("explained_var"),
             ratio_min=nnx.metrics.Average("ratio_min"),
             ratio_max=nnx.metrics.Average("ratio_max"),
+            lr=nnx.metrics.Average("lr")
         )
 
         self.rollout_metrics = nnx.MultiMetric(
@@ -130,3 +130,24 @@ class TrainState(nnx.Optimizer):
 
     def update(self, *, grads):
        super().update(grads)
+
+
+def  make_train_state(model: nnx.Module, cfg: Config) -> TrainState:
+    num_train_per_eval = cfg.eval_frequency // (cfg.rollout_len * cfg.num_envs)
+    assert num_train_per_eval > 0, "Eval Frequency must be >= Rollout Len * Num Envs"
+    num_updates = cfg.total_timesteps //  (cfg.rollout_len * cfg.num_envs)
+    num_grad_updates = num_updates * cfg.num_update_epochs * cfg.num_minibatches
+    lr_schedule = optax.linear_schedule(cfg.lr, cfg.lr * 0.0001, num_grad_updates) if cfg.use_lr_schedule else cfg.lr
+
+    @optax.inject_hyperparams
+    def optimizer_chain(lr_schedule):
+        return optax.chain(
+            optax.clip_by_global_norm(max_norm=cfg.max_grad_norm),
+            optax.adam(learning_rate=lr_schedule)
+        )
+
+    train_state = TrainState(
+        model, optimizer_chain(lr_schedule)
+    )
+
+    return train_state

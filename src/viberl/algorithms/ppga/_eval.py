@@ -25,12 +25,12 @@ def eval(
     collect_values: bool,
 ) -> Tuple[PolicyEvalResult, Rollout]:
 
-    total_rewards = jnp.zeros((cfg.num_envs,))
-    ep_len = jnp.zeros((cfg.num_envs,))
-    dones = jnp.zeros((cfg.num_envs,), dtype=bool)
+    total_rewards = jnp.zeros((cfg.eval_episodes,))
+    ep_len = jnp.zeros((cfg.eval_episodes,))
+    dones = jnp.zeros((cfg.eval_episodes,), dtype=bool)
 
     key, reset_key = jax.random.split(key, 2)
-    next_obs, env_state = vmap_reset(jax.random.split(reset_key, cfg.num_envs), env_params)
+    next_obs, env_state = vmap_reset(jax.random.split(reset_key, cfg.eval_episodes), env_params)
 
     obs_mean, obs_var = state.actor_critic.actor.obs_mean.value, state.actor_critic.actor.obs_var.value
 
@@ -42,7 +42,7 @@ def eval(
 
     rollout = make_empty_rollout(
         cfg.rollout_len,
-        cfg.num_envs,
+        cfg.eval_episodes,
         state.actor_critic.actor.obs_shape,
         state.actor_critic.actor.action_shape,
     )
@@ -53,7 +53,7 @@ def eval(
 
     def _cond_fn(carry: Tuple[State, Rollout, Dict[str, Any], jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]) -> bool:
         state, rollout, env_state, next_obs, dones, step, total_rewards, ep_len, key = carry
-        return  jnp.all(step < cfg.rollout_len)
+        return jnp.logical_not(jnp.all(dones)) #jnp.all(step < cfg.rollout_len)
 
     def _body_fn(
         carry: Tuple[State, Rollout, Dict[str, Any], jax.Array, jax.Array, int, jax.Array, jax.Array, jax.Array]
@@ -81,7 +81,7 @@ def eval(
         )
 
         next_obs, env_state, reward, next_dones, infos = vmap_step(
-            jax.random.split(env_step_key, cfg.num_envs),
+            jax.random.split(env_step_key, cfg.eval_episodes),
             env_state,
             action,
             env_params
@@ -116,6 +116,7 @@ def eval(
             truncated=_truncated,
             values=_values,
         )
+
         return state, rollout, env_state, next_obs, dones, step, total_rewards, ep_len, key
 
     state, rollout, env_state, next_obs, dones, step, total_rewards, ep_len, key = nnx.while_loop(

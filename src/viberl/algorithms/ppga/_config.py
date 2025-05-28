@@ -32,7 +32,7 @@ class _EvalConfig:
     normalize_rewards: bool
     normalize_advantages: bool
     rollout_len: int
-    num_envs: int
+    eval_episodes: int
 
 @struct.dataclass
 class Config:
@@ -57,11 +57,13 @@ class Config:
     actor_activation_fn: Callable[[jax.Array], jax.Array]
     critic_activation_fn: Callable[[jax.Array], jax.Array]
     lr: float
+    use_lr_schedule: bool
     max_grad_norm: float
     total_timesteps: int
     weight_decay: float
     eval_frequency: int
     num_measures: int
+    eval_episodes: int
 
     def training_config_subset(self) -> _TrainingConfig:
         return _TrainingConfig(
@@ -92,7 +94,7 @@ class Config:
             normalize_rewards=self.normalize_rewards,
             normalize_advantages=self.normalize_advantages,
             rollout_len=self.rollout_len,
-            num_envs=self.num_envs,
+            eval_episodes=self.eval_episodes,
         )
 
     @classmethod
