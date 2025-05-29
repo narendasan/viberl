@@ -263,14 +263,29 @@ class VectorizedActor(object):
 
 
 if __name__ == "__main__":
+    actor0 = ActorMLP((1,4), (1,2), hidden_dims=[128, 128])
+    nnx.display(actor0)
+
+    input = jnp.ones((1, 4,))
+    output = actor0(input)
+
+    print(output)
+    print(actor0.get_action(input, key=jax.random.key(0)))
+
+    actor_state = nnx.state(actor0, nnx.Param)
+    flattened_state, restore_fn = jax.flatten_util.ravel_pytree(actor_state)
+    print(flattened_state)
+
     actor = ActorMLP((1,4), (1,2), hidden_dims=[128, 128])
+    reconstructed_state = restore_fn(flattened_state)
+    nnx.update(actor, reconstructed_state)
     nnx.display(actor)
 
     input = jnp.ones((4,))
-    output = actor(input)
+    output1 = actor(input)
 
-    print(output)
-    print(actor.get_action(input, key=jax.random.key(0)))
+    print(output1)
+    assert (output == output1).all()
 
     key = jax.random.key(0)
     vec_actor = VectorizedActor(actor, num_replicas=2, key=key)

@@ -37,5 +37,5 @@ weight_decay = 0.0
 rollout_len = 2048
 total_timesteps = 3_000_000
 num_envs = 1
-eval_frequency = 2048
+eval_frequency = 204800
 eval_episodes = 10

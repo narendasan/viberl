@@ -1,18 +1,22 @@
 [experiment]
-name = "ppga_experiment_walker2d"
+name = "custom_ppo_experiment_walker2d"
 root_seed = 1111
 num_agent_seeds = 16
 ckpt_dir = "ckpts"
-tags = ["test", "walker2d", "ppga"]
-algorithm = "ppga"
+tags = ["test", "walker2d"]
+algorithm = "ppo"
 max_ckpt_to_keep = 5
 results_dir = "results"
 log_dir = "logs"
 log_level = "INFO"
 env_name = "brax/walker2d"
 
-[algorithm]
+[qd]
+num_iterations = 10
+
+[rl]
 lr = 3e-4
+use_lr_schedule = true
 actor_hidden_dims = [128, 128]
 critic_hidden_dims = [128, 128]
 actor_activation_fn = "tanh"
@@ -34,7 +38,8 @@ normalize_rewards = false       #true
 v_bootstrap = true
 weight_decay = 0.0
 rollout_len = 2048
-total_timesteps = 1_000_000
+total_timesteps = 3_000_000
 num_envs = 1
-eval_frequency = 20480
+eval_frequency = 204800
+eval_episodes = 10
 num_measures = 2
