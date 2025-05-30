@@ -25,7 +25,7 @@ TrainState at a later point.
 """
 
 def unstack_modules(module_class: Type[T], stacked_module_state: nnx.State, num_slices: int, module_init_args: List[Sequence[Any]], module_init_kwargs: List[Dict[str, Any]]) -> Sequence[T]:
-    module_states = [jax.tree_map(lambda x: x[i], stacked_module_state) for i in range(num_slices)]
+    module_states = [jax.tree.map (lambda x: x[i], stacked_module_state) for i in range(num_slices)]
     module_instances = [module_class(*module_init_args[i], **module_init_kwargs[i]) for i in range(num_slices)]
     [nnx.update(m, s) for m, s in zip(module_instances, module_states)]
 

@@ -292,7 +292,7 @@ if __name__ == "__main__":
     nnx.display(vec_actor._actor_replicas)
 
 
-    inputs = jnp.stack([jnp.ones((4,))] * 2)
+    inputs = jnp.stack([jnp.ones((1, 4,))] * 2)
     print(inputs.shape)
     outputs = vec_actor(inputs)
     print(outputs)
@@ -311,5 +311,7 @@ if __name__ == "__main__":
 
     [nnx.display(a) for a in vec_actor.unpack_actors()]
 
-    get_action = jax.jit(vec_actor.get_action)
-    print(get_action(inputs, keys=split_keys))
+
+    jit_action = nnx.jit(vec_actor._vec_get_action)
+    jit_action(vec_actor._actor_replicas, inputs, split_keys)
+    print(vec_actor._vec_get_action(vec_actor._actor_replicas, inputs, split_keys))
